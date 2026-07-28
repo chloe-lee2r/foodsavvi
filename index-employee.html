@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>foodsavvi • employee home</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/icon.png">
+    <link rel="apple-touch-icon" sizes="167x167" href="assets/icon.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="assets/icon.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="assets/icon.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="assets/icon.png">
+    <link rel="apple-touch-icon" href="assets/icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="foodsavvi">
+    <link rel="icon" type="image/png" href="assets/icon.png">
+    <link rel="shortcut icon" type="image/png" href="assets/icon.png">
+    <link rel="manifest" href="assets/site.webmanifest">
+    <meta name="msapplication-TileImage" content="assets/icon.png">
+    <meta name="msapplication-TileColor" content="#667eea">
+    <meta name="theme-color" content="#667eea">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => console.log('SW registered:', registration.scope))
+                    .catch(err => console.log('SW registration failed:', err));
+            });
+        }
+    </script>        
+    <style>
+        :root {
+            --green: #34c759;
+            --blue: #007aff;
+            --orange: #ff9500;
+            --red: #ff3b30;
+            --purple: #764ba2;
+        }
+
+        @font-face {
+            font-family: 'RusticStory';
+            src: url('./assets/RusticStory-R9vKM.ttf') format('truetype'),
+                 url('./assets/RusticStory-1jDPL.otf') format('opentype');
+            font-weight: normal;
+            font-style: normal;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'RusticStory', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .app {
+            width: 100%;
+            max-width: 400px;
+            background: white;
+            min-height: 100vh;
+            box-shadow: 0 0 20px rgba(0,0,0,0.03);
+            animation: appSlideUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes appSlideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideInLeft {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
+        
+        .header {
+            padding: 30px 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background: radial-gradient(circle at 30% 50%, rgba(255,255,255,0.08) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        
+        .greeting {
+            font-size: 24px; font-weight: 600; margin-bottom: 8px;
+            display: flex; align-items: center; gap: 12px;
+            position: relative; z-index: 1;
+            animation: slideInLeft 0.5s ease;
+        }
+        .user-avatar {
+            width: 50px; height: 50px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 25px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px; overflow: hidden;
+        }
+        .user-info { flex: 1; }
+        .user-name { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+        .user-badge {
+            display: inline-block; padding: 4px 12px;
+            background: rgba(255,255,255,0.2); border-radius: 20px;
+            font-size: 12px; 
+        }
+        .date { font-size: 14px; opacity: 0.9; margin-top: 8px; position: relative; z-index: 1; animation: slideInRight 0.5s ease 0.1s both; }
+        
+        .logout-btn {
+            position: absolute; top: 30px; right: 20px;
+            background: rgba(255,255,255,0.2); border: none;
+            color: white; padding: 8px 16px; border-radius: 20px;
+            font-size: 14px; cursor: pointer; transition: background 0.2s ease; font-family: inherit; z-index: 2;
+        }
+        .logout-btn:hover { background: rgba(255,59,48,0.4); }
+        .logout-btn:active { background: rgba(255,59,48,0.6); }
+        
+        .content { padding: 20px; padding-bottom: 100px; }
+        
+        .section-title {
+            font-size: 16px; font-weight: 600; color: #1a1a1a;
+            margin-bottom: 16px; display: flex;
+            justify-content: space-between; align-items: center;
+        }
+        .view-all { color: #667eea; font-size: 14px; text-decoration: none; cursor: pointer; }
+        
+        /* Quick Actions */
+        .quick-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
+        .action-card {
+            background: #f8f9fa; border-radius: 16px; padding: 20px;
+            text-decoration: none; color: #1a1a1a;
+            border: 1px solid #f0f0f0; cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .action-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+            border-color: #667eea;
+        }
+        .action-card:active { transform: scale(0.96); }
+        .card-emoji { font-size: 28px; margin-bottom: 8px; transition: transform 0.3s ease; display: inline-block; line-height: 1; }
+        .action-card:hover .card-emoji { transform: scale(1.2); }
+        .card-title { font-weight: 600; margin-bottom: 4px; }
+        .card-desc { font-size: 12px; color: #666; }
+
+        /* Summary Section */
+        .summary-section {
+            background: #f8f9fa; border-radius: 16px; padding: 16px;
+            margin-bottom: 16px; border: 1px solid #f0f0f0;
+        }
+        .summary-row {
+            display: flex; justify-content: space-between; padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .summary-row:last-child { border-bottom: none; }
+        .summary-label { font-size: 14px; color: #666; }
+        .summary-value { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+
+        /* Deals */
+        .deals-list { margin-bottom: 24px; }
+        .deal-item {
+            background: #f8f9fa; padding: 16px; border-radius: 12px;
+            margin-bottom: 8px; display: flex; align-items: center;
+            gap: 12px; border: 1px solid #f0f0f0;
+            cursor: pointer; transition: all 0.3s ease;
+            animation: slideInRight 0.4s ease;
+        }
+        .deal-item:hover { transform: translateX(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-color: #667eea; }
+        .deal-item:active { background: #f0f2f5; }
+        .deal-icon { width: 40px; height: 40px; background: white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; overflow: hidden; flex-shrink: 0; }
+        .deal-icon img { width: 100%; height: 100%; object-fit: cover; }
+        .deal-details { flex: 1; }
+        .deal-name { font-weight: 600; margin-bottom: 4px; }
+        .deal-meta { font-size: 12px; color: #666; display: flex; gap: 8px; flex-wrap: wrap; }
+        .deal-shop { color: #667eea; }
+        .deal-discount { color: #34c759; font-weight: 600; font-size: 16px; }
+        
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            max-width: 400px; margin: 0 auto; background: white;
+            border-top: 1px solid #f0f0f0; padding: 8px 20px;
+            display: flex; justify-content: space-around; z-index: 100;
+        }
+        .nav-item {
+            text-decoration: none; color: #999; font-size: 12px;
+            text-align: center; flex: 1; padding: 4px 0;
+            cursor: pointer; transition: all 0.3s ease; position: relative;
+        }
+        .nav-item:hover { color: #667eea; }
+        .nav-item.active { color: #667eea; }
+        .nav-emoji { font-size: 20px; margin-bottom: 2px; display: block; height: 24px; line-height: 24px; transition: transform 0.3s; }
+        .nav-item:hover .nav-emoji { transform: translateY(-3px); }
+        .nav-item:active .nav-emoji { transform: scale(1.3); }
+
+        .loading-spinner {
+            width: 30px; height: 30px;
+            border: 3px solid #f0f0f0; border-top-color: #667eea;
+            border-radius: 50%; animation: spin 1s linear infinite;
+            margin: 0 auto 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .empty-state { text-align: center; padding: 20px; color: #999; }
+        
+        .notification {
+            position: fixed; bottom: 80px; left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #1a1a1a; color: white; padding: 12px 24px;
+            border-radius: 30px; font-size: 14px; transition: 0.3s;
+            z-index: 1000; text-align: center; max-width: 90%;
+            opacity: 0; pointer-events: none;
+        }
+        .notification.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1; pointer-events: auto;
+        }
+        .notification.success { background: #34c759; }
+        .notification.error { background: #ff3b30; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="header">
+            <div class="greeting">
+                <div class="user-avatar" id="userAvatar">👤</div>
+                <div class="user-info">
+                    <div class="user-name" id="userName">loading...</div>
+                    <div class="user-badge" id="userBadge">employee</div>
+                </div>
+            </div>
+            <div class="date" id="currentDate"></div>
+            <button class="logout-btn" onclick="simpleLogout()">logout</button>
+        </div>
+        
+        <div class="content">
+            
+            <div class="quick-actions" id="quickActions">
+                <!-- Dynamic cards will be injected based on permissions -->
+            </div>
+
+            <div class="section-title">
+                🔥 hot deals near you
+                <span class="view-all" onclick="window.location.href='find-stores.html'">view all →</span>
+            </div>
+            <div class="deals-list" id="recentDeals">
+                <div class="loading"><div class="loading-spinner"></div>loading deals...</div>
+            </div>
+
+        </div>
+        
+        <div class="bottom-nav">
+            <div class="nav-item active" onclick="goHome()"><span class="nav-emoji">🏠</span><span>home</span></div>
+            <div class="nav-item" onclick="window.location.href='find-stores.html'"><span class="nav-emoji">🔍</span><span>deals</span></div>
+            <div class="nav-item" onclick="window.location.href='business-profile.html'"><span class="nav-emoji">⚙️</span><span>settings</span></div>
+        </div>
+    </div>
+    
+    <div class="notification" id="notification"></div>
+    
+    <script src="https://npmcdn.com/parse/dist/parse.min.js"></script>
+    <script src="backend.js"></script>
+    
+    <script>
+        let currentPermissions = {};
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const user = Backend.getCurrentUser();
+            const role = localStorage.getItem('userRole');
+            
+            // Kick them out if they aren't an advertiser
+            if (!user || role !== 'advertiser') {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            // Fetch the user's permissions
+            currentPermissions = await Backend.getEmployeePermissions(user.id);
+
+            // If the user is still pending, boot them to the waiting room
+            if (currentPermissions.isPending) {
+                window.location.href = 'waiting-approval.html';
+                return;
+            }
+
+            // If they are the owner, they shouldn't be here (they should be on index.html)
+            if (currentPermissions.isOwner) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            // Update UI
+            document.getElementById('userName').textContent = user.get('username');
+            document.getElementById('userBadge').textContent = user.get('businessRole') || 'employee';
+            document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+            renderQuickActions(currentPermissions);
+            loadDeals();
+        });
+
+        function renderQuickActions(perms) {
+            const container = document.getElementById('quickActions');
+            let html = '';
+
+            // INVENTORY (Read or Edit)
+            if (perms.can_read_inventory || perms.can_edit_inventory) {
+                html += `
+                    <div class="action-card" onclick="window.location.href='business-profile.html?tab=inventory'">
+                        <div class="card-emoji">📦</div>
+                        <div class="card-title">inventory</div>
+                        <div class="card-desc">view stock</div>
+                    </div>
+                `;
+            }
+
+            // ADS (Post)
+            if (perms.can_post_ads) {
+                html += `
+                    <div class="action-card" onclick="window.location.href='advertise.html'">
+                        <div class="card-emoji">📢</div>
+                        <div class="card-title">post ad</div>
+                        <div class="card-desc">list surplus food</div>
+                    </div>
+                `;
+            }
+
+            // ORDERS (View)
+            if (perms.can_view_orders) {
+                html += `
+                    <div class="action-card" onclick="window.location.href='business-profile.html?tab=orders'">
+                        <div class="card-emoji">📦</div>
+                        <div class="card-title">orders</div>
+                        <div class="card-desc">incoming requests</div>
+                    </div>
+                `;
+            }
+
+            // EMPLOYEES (Manage)
+            if (perms.can_manage_employees) {
+                html += `
+                    <div class="action-card" onclick="window.location.href='business-profile.html?tab=employees'">
+                        <div class="card-emoji">👥</div>
+                        <div class="card-title">staff</div>
+                        <div class="card-desc">manage team</div>
+                    </div>
+                `;
+            }
+
+            // Default fallback if they have no specific action buttons
+            if (html === '') {
+                html = `
+                    <div class="action-card" onclick="window.location.href='business-profile.html'">
+                        <div class="card-emoji">⚙️</div>
+                        <div class="card-title">settings</div>
+                        <div class="card-desc">view your profile</div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        async function loadDeals() {
+            const container = document.getElementById('recentDeals');
+            try {
+                const ads = await Backend.getActiveAds({ limit: 50 });
+                if (ads.length === 0) {
+                    container.innerHTML = '<div class="empty-state">🔍 no active deals nearby</div>';
+                    return;
+                }
+                // Show top 3 deals
+                container.innerHTML = ads.slice(0, 3).map(ad => {
+                    const daysUntil = Math.ceil((new Date(ad.offerEnds) - new Date()) / (1000*60*60*24));
+                    return `
+                        <div class="deal-item" onclick="window.location.href='find-stores.html'">
+                            <div class="deal-icon">${ad.productImage ? `<img src="${ad.productImage}" alt="">` : '🏷️'}</div>
+                            <div class="deal-details">
+                                <div class="deal-name">${escapeHtml(ad.foodName)}</div>
+                                <div class="deal-meta"><span class="deal-shop">${escapeHtml(ad.shopName)}</span><span>•</span><span>${daysUntil} days left</span></div>
+                            </div>
+                            <div class="deal-discount">-${ad.discount}%</div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                container.innerHTML = '<div class="empty-state">error loading deals</div>';
+            }
+        }
+
+        function goHome() {
+            window.location.href = 'index-employee.html';
+        }
+
+        function simpleLogout() {
+            if (!confirm('Are you sure you want to logout?')) return;
+            try { Backend.logout().catch(() => {}); } catch (e) {}
+            window.location.href = 'login.html';
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
+        }
+
+        window.goHome = goHome;
+        window.simpleLogout = simpleLogout;
+    </script>
+</body>
+</html>
