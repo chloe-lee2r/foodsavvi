@@ -2152,70 +2152,69 @@
             await loadRoles();
         }
 
-        // ===== FIXED LOAD EMPLOYEES (Case-insensitive pending check + debug logs) =====
         async function loadEmployees() {
-            const pendingContainer = document.getElementById('pendingEmployeesList');
-            const activeContainer = document.getElementById('activeEmployeesList');
-            try {
-                const employees = await Backend.getStaffList();
-                
-                console.log("👥 Raw staff list from Backend:", JSON.stringify(employees, null, 2));
-                
-                // 🔥 FIX: Case-insensitive pending check
-                const pending = employees.filter(e => {
-                    const role = (e.role || '').toLowerCase();
-                    console.log(`🔍 ${e.username} → role: "${e.role}" (lowercase: "${role}")`);
-                    return role === 'pending';
-                });
-                
-                console.log(`📊 Pending employees found: ${pending.length}`);
-                console.log("Pending list:", pending);
-                
-                // Render Pending
-                if (pending.length === 0) {
-                    pendingContainer.innerHTML = '<div class="empty-state" style="padding: 20px;">No pending requests</div>';
-                    console.log("❌ No pending employees found to render");
-                } else {
-                    pendingContainer.innerHTML = pending.map(emp => `
-                        <div class="employee-item">
-                            <div class="employee-avatar">👤</div>
-                            <div class="employee-details">
-                                <div class="employee-name">${escapeHtml(emp.username)}</div>
-                                <span class="employee-role pending">pending approval</span>
-                            </div>
-                            <div class="employee-actions">
-                                <button class="emp-action-btn approve" onclick="approveEmployee('${emp.id}')">✅ Approve</button>
-                                <button class="emp-action-btn revoke" onclick="removeEmployee('${emp.id}')">✗ Deny</button>
-                            </div>
-                        </div>
-                    `).join('');
-                    console.log(`✅ Rendered ${pending.length} pending employees`);
-                }
+    const pendingContainer = document.getElementById('pendingEmployeesList');
+    const activeContainer = document.getElementById('activeEmployeesList');
+    
+    try {
+        const employees = await Backend.getStaffList();
+        
+        // ——— PENDING ———
+        const pending = employees.filter(e => {
+            const role = (e.role || '').toLowerCase();
+            return role === 'pending';
+        });
 
-                // Render Active
-                const active = employees.filter(e => {
-                    const role = (e.role || '').toLowerCase();
-                    return role !== 'pending' && role !== 'owner' && role !== '';
-                });
-                
-                if (active.length === 0) {
-                    activeContainer.innerHTML = '<div class="empty-state" style="padding: 20px;">No active employees</div>';
-                } else {
-                    activeContainer.innerHTML = active.map(emp => `
-                        <div class="employee-item">
-                            <div class="employee-avatar">👤</div>
-                            <div class="employee-details">
-                                <div class="employee-name">${escapeHtml(emp.username)}</div>
-                                <span class="employee-role ${emp.role}">${emp.role}</span>
-                            </div>
-                            <div class="employee-actions">
-                                <button class="emp-action-btn assign" onclick="assignRole('${emp.id}')">🎯 Assign Role</button>
-                                <button class="emp-action-btn revoke" onclick="removeEmployee('${emp.id}')">🗑️ Remove</button>
-                            </div>
-                        </div>
-                    `).join('');
-                }
+        if (pending.length === 0) {
+            pendingContainer.innerHTML = `<div class="empty-state" style="padding:20px;">No pending requests</div>`;
+        } else {
+            pendingContainer.innerHTML = pending.map(emp => `
+                <div class="employee-item">
+                    <div class="employee-avatar">👤</div>
+                    <div class="employee-details">
+                        <div class="employee-name">${escapeHtml(emp.username)}</div>
+                        <span class="employee-role pending">pending approval</span>
+                    </div>
+                    <div class="employee-actions">
+                        <button class="emp-action-btn approve" onclick="approveEmployee('${emp.id}')">✅ Approve</button>
+                        <button class="emp-action-btn revoke" onclick="removeEmployee('${emp.id}')">✗ Deny</button>
+                    </div>
+                </div>
+            `).join('');
+        }
 
+        // ——— ACTIVE ———
+        const active = employees.filter(e => {
+            const role = (e.role || '').toLowerCase();
+            return role !== 'pending' && role !== 'owner' && role !== '';
+        });
+
+        if (active.length === 0) {
+            activeContainer.innerHTML = `<div class="empty-state" style="padding:20px;">No active employees</div>`;
+        } else {
+            activeContainer.innerHTML = active.map(emp => `
+                <div class="employee-item">
+                    <div class="employee-avatar">👤</div>
+                    <div class="employee-details">
+                        <div class="employee-name">${escapeHtml(emp.username)}</div>
+                        <span class="employee-role ${emp.role}">${emp.role}</span>
+                    </div>
+                    <div class="employee-actions">
+                        <button class="emp-action-btn assign" onclick="assignRole('${emp.id}')">🎯 Assign Role</button>
+                        <button class="emp-action-btn revoke" onclick="removeEmployee('${emp.id}')">🗑️ Remove</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+    } catch (error) {
+        console.error('loadEmployees error:', error);
+        pendingContainer.innerHTML = `<div class="empty-state" style="padding:20px;color:#ff3b30;">Error loading employees</div>`;
+        activeContainer.innerHTML = '';
+    }
+}
+        // ===== FIXED LOAD EMPLOYEES (Case-insensitive pending check + debug logs) =====
+        
                 // ---- INVITATION CODE ----
                 const user = Backend.getCurrentUser();
                 let inviteCode = user ? user.get('invitationCode') : null;
