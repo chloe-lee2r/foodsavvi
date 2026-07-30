@@ -374,15 +374,22 @@ const Backend = {
         }
     },
 
+    // ===== FIXED: Fetch fresh owner data so staff list actually loads =====
     async getStaffList() {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return [];
-            const staffIds = currentUser.get("businessStaff") || [];
+            
+            // 🔥 FIX: Fetch fresh owner data from server
+            const freshOwner = await new Parse.Query(Parse.User).get(currentUser.id, { useMasterKey: true });
+            const staffIds = freshOwner.get("businessStaff") || [];
+            
             if (staffIds.length === 0) return [];
+            
             const query = new Parse.Query(Parse.User);
             query.containedIn("objectId", staffIds);
-            const staffUsers = await query.find();
+            const staffUsers = await query.find({ useMasterKey: true });
+            
             return staffUsers.map(user => ({
                 id: user.id,
                 username: user.get("username"),
@@ -1812,7 +1819,7 @@ const Backend = {
         }
     },
 
-    // Assign a custom role to an employee
+    // ===== FIXED: Assign role to employee (with Master Key) =====
     async assignRoleToEmployee(employeeId, roleName) {
         try {
             const currentUser = Parse.User.current();
@@ -1821,19 +1828,23 @@ const Backend = {
                 return { success: false, message: "Only owners can assign roles" };
             }
 
-            const employee = await new Parse.Query(Parse.User).get(employeeId);
-            if (!employee) return { success: false, message: "Employee not found" };
-            
+            // 🔥 FIX: Use Master Key to fetch employee
+            const employee = await new Parse.Query(Parse.User).get(employeeId, { useMasterKey: true });
+            if (!employee) {
+                return { success: false, message: "Employee not found" };
+            }
+
             employee.set("businessRole", roleName);
-            // When role is assigned, ensure they are added to the staff list
+            await employee.save(null, { useMasterKey: true });
+
+            // Ensure they are in the owner's staff list
             const staffList = currentUser.get("businessStaff") || [];
             if (!staffList.includes(employeeId)) {
                 staffList.push(employeeId);
                 currentUser.set("businessStaff", staffList);
-                await currentUser.save();
+                await currentUser.save(null, { useMasterKey: true });
             }
-            await employee.save();
-            
+
             return { success: true, message: `Role "${roleName}" assigned to employee` };
         } catch (error) {
             console.error("Error assigning role:", error);
