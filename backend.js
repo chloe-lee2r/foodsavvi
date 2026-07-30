@@ -53,6 +53,7 @@ const Backend = {
                     user.set("businessRole", "pending");
                     user.set("businessId", businessDetails.businessId);
                     user.set("businessName", businessDetails.businessName);
+                    user.set("businessStaffStatus", "pending"); // Add pending status
                     
                     // Save the new employee user FIRST
                     await user.signUp();
@@ -385,7 +386,7 @@ const Backend = {
             return staffUsers.map(user => ({
                 id: user.id,
                 username: user.get("username"),
-                role: user.get("businessRole"),
+                role: user.get("businessRole") || "pending",
                 email: user.get("email")
             }));
         } catch (error) {
@@ -842,10 +843,45 @@ const Backend = {
             businessUser.set("businessWalletBalance", currentBalance + orderAmount);
             await businessUser.save(null, { useMasterKey: true });
             
+            // ===== AUTO-ADD TO FRIDGE =====
+            try {
+                const foodName = order.get("foodName") || "Unknown Item";
+                const batchNumber = order.get("batchNumber") || "";
+                
+                // Calculate expiry date: 7 days from now
+                const expiryDate = new Date();
+                expiryDate.setDate(expiryDate.getDate() + 7);
+                const expiryStr = expiryDate.toISOString().split('T')[0];
+                
+                // Load current fridge items
+                const Fridge = Parse.Object.extend("Fridge");
+                const fridgeQuery = new Parse.Query(Fridge);
+                fridgeQuery.equalTo("userId", currentUser.id);
+                const existingItems = await fridgeQuery.find({ useMasterKey: true });
+                
+                // Add new item
+                const newItem = new Fridge();
+                newItem.set("userId", currentUser.id);
+                newItem.set("name", foodName);
+                newItem.set("expiryDate", new Date(expiryStr));
+                newItem.set("category", "other");
+                newItem.set("price", orderAmount / (order.get("quantity") || 1));
+                newItem.set("qty", order.get("quantity") || 1);
+                newItem.set("batchNumber", batchNumber);
+                newItem.set("source", "order_" + orderId);
+                await newItem.save(null, { useMasterKey: true });
+                
+                console.log(`✅ Added "${foodName}" to fridge for user ${currentUser.id}`);
+            } catch (fridgeError) {
+                console.error("Error adding to fridge:", fridgeError);
+                // Continue even if fridge add fails
+            }
+            
             await this.sendNotification(order.get("businessId"),
                 `💰 Payment released! Customer collected ${order.get("foodName")}. $${orderAmount.toFixed(2)} added to wallet.`);
             
-            return { success: true, message: "Pickup confirmed!" };
+            return { success: true, message: "Pickup confirmed! Item added to your fridge." };
+            
         } catch (error) {
             console.error('confirmCollectedByCustomer error:', error);
             return { success: false, message: error.message || "Failed to confirm pickup" };
@@ -1146,6 +1182,8 @@ const Backend = {
                 fridgeItem.set("category", item.category || "other");
                 fridgeItem.set("price", item.price || 0);
                 fridgeItem.set("qty", item.qty || 1);
+                fridgeItem.set("batchNumber", item.batchNumber || "");
+                fridgeItem.set("source", item.source || "manual");
                 return fridgeItem;
             });
             await Parse.Object.saveAll(newItems);
@@ -1169,7 +1207,9 @@ const Backend = {
                 expiry: item.get("expiryDate").toISOString().split('T')[0],
                 category: item.get("category"),
                 price: item.get("price") || 0,
-                qty: item.get("qty") || 1
+                qty: item.get("qty") || 1,
+                batchNumber: item.get("batchNumber") || "",
+                source: item.get("source") || "manual"
             }));
         } catch (error) {
             return [];
@@ -1785,6 +1825,13 @@ const Backend = {
             if (!employee) return { success: false, message: "Employee not found" };
             
             employee.set("businessRole", roleName);
+            // When role is assigned, ensure they are added to the staff list
+            const staffList = currentUser.get("businessStaff") || [];
+            if (!staffList.includes(employeeId)) {
+                staffList.push(employeeId);
+                currentUser.set("businessStaff", staffList);
+                await currentUser.save();
+            }
             await employee.save();
             
             return { success: true, message: `Role "${roleName}" assigned to employee` };

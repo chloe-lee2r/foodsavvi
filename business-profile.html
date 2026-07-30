@@ -2152,14 +2152,26 @@
             await loadRoles();
         }
 
+        // ===== FIXED LOAD EMPLOYEES (Case-insensitive pending check) =====
         async function loadEmployees() {
             const pendingContainer = document.getElementById('pendingEmployeesList');
             const activeContainer = document.getElementById('activeEmployeesList');
             try {
                 const employees = await Backend.getStaffList();
                 
-                // Render Pending (users with role 'pending')
-                const pending = employees.filter(e => e.role === 'pending');
+                // 🔥 DEBUG: Log the raw data
+                console.log("👥 Raw staff list from Backend:", JSON.stringify(employees, null, 2));
+                
+                // 🔥 FIX: Case-insensitive pending check
+                const pending = employees.filter(e => {
+                    const role = (e.role || '').toLowerCase();
+                    console.log(`🔍 ${e.username} → role: "${e.role}" (lowercase: "${role}")`);
+                    return role === 'pending';
+                });
+                
+                console.log(`📊 Pending employees found: ${pending.length}`);
+                
+                // Render Pending
                 if (pending.length === 0) {
                     pendingContainer.innerHTML = '<div class="empty-state" style="padding: 20px;">No pending requests</div>';
                 } else {
@@ -2178,8 +2190,12 @@
                     `).join('');
                 }
 
-                // Render Active (users who are not pending and not the owner)
-                const active = employees.filter(e => e.role !== 'pending' && e.role !== 'owner');
+                // Render Active
+                const active = employees.filter(e => {
+                    const role = (e.role || '').toLowerCase();
+                    return role !== 'pending' && role !== 'owner' && role !== '';
+                });
+                
                 if (active.length === 0) {
                     activeContainer.innerHTML = '<div class="empty-state" style="padding: 20px;">No active employees</div>';
                 } else {
@@ -2198,7 +2214,7 @@
                     `).join('');
                 }
 
-                // ---- INVITATION CODE - always show in employees tab ----
+                // ---- INVITATION CODE ----
                 const user = Backend.getCurrentUser();
                 let inviteCode = user ? user.get('invitationCode') : null;
                 if (!inviteCode) {
@@ -2212,6 +2228,7 @@
                 document.getElementById('displayInviteCode').textContent = inviteCode || '-----';
 
             } catch (error) {
+                console.error("Error loading employees:", error);
                 pendingContainer.innerHTML = '<div class="empty-state" style="padding:20px;color:#ff3b30;">Error loading employees</div>';
                 activeContainer.innerHTML = '';
             }
