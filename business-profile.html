@@ -2140,14 +2140,13 @@
             await loadRoles();
         }
 
-        // ===== FIXED LOAD EMPLOYEES (Case-insensitive pending check) =====
+        // ===== FIXED LOAD EMPLOYEES (Case-insensitive pending check + debug logs) =====
         async function loadEmployees() {
             const pendingContainer = document.getElementById('pendingEmployeesList');
             const activeContainer = document.getElementById('activeEmployeesList');
             try {
                 const employees = await Backend.getStaffList();
                 
-                // 🔥 DEBUG: Log the raw data
                 console.log("👥 Raw staff list from Backend:", JSON.stringify(employees, null, 2));
                 
                 // 🔥 FIX: Case-insensitive pending check
@@ -2158,10 +2157,12 @@
                 });
                 
                 console.log(`📊 Pending employees found: ${pending.length}`);
+                console.log("Pending list:", pending);
                 
                 // Render Pending
                 if (pending.length === 0) {
                     pendingContainer.innerHTML = '<div class="empty-state" style="padding: 20px;">No pending requests</div>';
+                    console.log("❌ No pending employees found to render");
                 } else {
                     pendingContainer.innerHTML = pending.map(emp => `
                         <div class="employee-item">
@@ -2176,6 +2177,7 @@
                             </div>
                         </div>
                     `).join('');
+                    console.log(`✅ Rendered ${pending.length} pending employees`);
                 }
 
                 // Render Active
