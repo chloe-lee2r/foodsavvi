@@ -170,24 +170,7 @@
         .summary-label { font-size: 14px; color: #666; }
         .summary-value { font-size: 14px; font-weight: 600; color: #1a1a1a; }
 
-        /* Deals */
-        .deals-list { margin-bottom: 24px; }
-        .deal-item {
-            background: #f8f9fa; padding: 16px; border-radius: 12px;
-            margin-bottom: 8px; display: flex; align-items: center;
-            gap: 12px; border: 1px solid #f0f0f0;
-            cursor: pointer; transition: all 0.3s ease;
-            animation: slideInRight 0.4s ease;
-        }
-        .deal-item:hover { transform: translateX(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-color: #667eea; }
-        .deal-item:active { background: #f0f2f5; }
-        .deal-icon { width: 40px; height: 40px; background: white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; overflow: hidden; flex-shrink: 0; }
-        .deal-icon img { width: 100%; height: 100%; object-fit: cover; }
-        .deal-details { flex: 1; }
-        .deal-name { font-weight: 600; margin-bottom: 4px; }
-        .deal-meta { font-size: 12px; color: #666; display: flex; gap: 8px; flex-wrap: wrap; }
-        .deal-shop { color: #667eea; }
-        .deal-discount { color: #34c759; font-weight: 600; font-size: 16px; }
+        /* Deals section removed — no more deals-related CSS needed */
         
         .bottom-nav {
             position: fixed; bottom: 0; left: 0; right: 0;
@@ -252,19 +235,13 @@
                 <!-- Dynamic cards will be injected based on permissions -->
             </div>
 
-            <div class="section-title">
-                🔥 hot deals near you
-                <span class="view-all" onclick="window.location.href='find-stores.html'">view all →</span>
-            </div>
-            <div class="deals-list" id="recentDeals">
-                <div class="loading"><div class="loading-spinner"></div>loading deals...</div>
-            </div>
-
+            <!-- Hot deals section completely removed -->
+            <!-- The employee only sees actions they have permission for -->
         </div>
         
         <div class="bottom-nav">
             <div class="nav-item active" onclick="goHome()"><span class="nav-emoji">🏠</span><span>home</span></div>
-            <div class="nav-item" onclick="window.location.href='find-stores.html'"><span class="nav-emoji">🔍</span><span>deals</span></div>
+            <!-- Deals nav item removed -->
             <div class="nav-item" onclick="window.location.href='business-profile.html'"><span class="nav-emoji">⚙️</span><span>settings</span></div>
         </div>
     </div>
@@ -308,7 +285,7 @@
             document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
             renderQuickActions(currentPermissions);
-            loadDeals();
+            // loadDeals() removed
         });
 
         function renderQuickActions(perms) {
@@ -373,32 +350,7 @@
             container.innerHTML = html;
         }
 
-        async function loadDeals() {
-            const container = document.getElementById('recentDeals');
-            try {
-                const ads = await Backend.getActiveAds({ limit: 50 });
-                if (ads.length === 0) {
-                    container.innerHTML = '<div class="empty-state">🔍 no active deals nearby</div>';
-                    return;
-                }
-                // Show top 3 deals
-                container.innerHTML = ads.slice(0, 3).map(ad => {
-                    const daysUntil = Math.ceil((new Date(ad.offerEnds) - new Date()) / (1000*60*60*24));
-                    return `
-                        <div class="deal-item" onclick="window.location.href='find-stores.html'">
-                            <div class="deal-icon">${ad.productImage ? `<img src="${ad.productImage}" alt="">` : '🏷️'}</div>
-                            <div class="deal-details">
-                                <div class="deal-name">${escapeHtml(ad.foodName)}</div>
-                                <div class="deal-meta"><span class="deal-shop">${escapeHtml(ad.shopName)}</span><span>•</span><span>${daysUntil} days left</span></div>
-                            </div>
-                            <div class="deal-discount">-${ad.discount}%</div>
-                        </div>
-                    `;
-                }).join('');
-            } catch (e) {
-                container.innerHTML = '<div class="empty-state">error loading deals</div>';
-            }
-        }
+        // loadDeals function removed entirely
 
         function goHome() {
             window.location.href = 'index-employee.html';
