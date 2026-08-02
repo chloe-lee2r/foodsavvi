@@ -18,7 +18,6 @@
         }
     </script>
     <style>
-        /* ========== All styles ========== */
         @font-face {
             font-family: 'RusticStory';
             src: url('./assets/RusticStory-R9vKM.ttf') format('truetype'),
@@ -421,7 +420,6 @@
         .emp-action-btn.assign { background: #e3f2fd; color: #0d47a1; }
         .emp-action-btn.assign:hover { background: #bbdefb; }
 
-        /* ===== DROPDOWN MENU FOR ROLE ASSIGNMENT ===== */
         .role-assign-wrapper {
             position: relative;
             display: inline-block;
@@ -1798,7 +1796,6 @@
                     </div>
                     <div class="inventory-actions">
                         <button class="save-btn" onclick="addInventoryItem()">➕ Add to Inventory</button>
-                        <!-- Import from Ads button removed -->
                     </div>
                 </div>
 
@@ -1981,73 +1978,12 @@
     </script>
 
     <script>
-        // ===== SECURITY: Check if user is owner or employee =====
+        // ===== GLOBAL VARIABLES =====
         let currentPermissions = {};
         let isOwner = false;
         let isManager = false;
         let isEmployee = false;
-
-        (async function checkAccess() {
-            const user = Backend.getCurrentUser();
-            const role = localStorage.getItem('userRole');
-            if (!user || role !== 'advertiser') {
-                window.location.href = 'login.html';
-                return;
-            }
-
-            currentPermissions = await Backend.getEmployeePermissions(user.id);
-
-            if (currentPermissions.isOwner) {
-                isOwner = true;
-            } else if (user.get('businessRole') === 'manager') {
-                isManager = true;
-            } else if (!currentPermissions.isPending) {
-                isEmployee = true;
-            }
-
-            if (isEmployee || isManager) {
-                document.getElementById('backLink').href = 'employee-settings.html';
-            } else {
-                document.getElementById('backLink').href = 'index.html';
-            }
-
-            if (isEmployee) {
-                document.getElementById('employeesTab').style.display = 'none';
-                document.getElementById('verificationTab').style.display = 'none';
-                document.getElementById('dataTab').style.display = 'none';
-                document.querySelectorAll('.tab')[1].style.display = 'none';
-                document.querySelectorAll('.tab')[5].style.display = 'none';
-                document.querySelectorAll('.tab')[7].style.display = 'none';
-                document.getElementById('walletCard').style.display = 'none';
-                document.querySelector('.stats-grid').style.display = 'none';
-                document.getElementById('roleBanner').style.display = 'none';
-                document.getElementById('saveProfileBtn').style.display = 'none';
-                document.querySelectorAll('#profileTab .form-input').forEach(input => {
-                    input.disabled = true;
-                });
-            }
-
-            if (isManager && !isOwner) {
-                document.getElementById('employeesTab').style.display = 'none';
-                document.getElementById('verificationTab').style.display = 'none';
-                document.querySelectorAll('.tab')[1].style.display = 'none';
-                document.querySelectorAll('.tab')[5].style.display = 'none';
-            }
-        })();
-
-        // ===== LOCALSTORAGE-BASED persistence for businessPickupConfirmed =====
-        function loadPickupMap() {
-            try {
-                const raw = localStorage.getItem('businessPickupConfirmMap');
-                return raw ? JSON.parse(raw) : {};
-            } catch (e) {
-                return {};
-            }
-        }
-
-        function savePickupMap(map) {
-            localStorage.setItem('businessPickupConfirmMap', JSON.stringify(map));
-        }
+        let businessId = null; // This holds the owner's ID for employees, or the user's own ID for owners
 
         let pickupConfirmMap = loadPickupMap();
         let businessRole = 'staff';
@@ -2058,6 +1994,18 @@
         let selectedOrderIds = new Set();
         let currentDetailOrderId = null;
 
+        // ===== PERSISTENCE HELPERS =====
+        function loadPickupMap() {
+            try {
+                const raw = localStorage.getItem('businessPickupConfirmMap');
+                return raw ? JSON.parse(raw) : {};
+            } catch (e) { return {}; }
+        }
+
+        function savePickupMap(map) {
+            localStorage.setItem('businessPickupConfirmMap', JSON.stringify(map));
+        }
+
         function calcPendingFromOrders(orders) {
             let total = 0;
             for (const order of orders) {
@@ -2067,11 +2015,7 @@
         }
 
         function countPendingOrders(orders) {
-            let count = 0;
-            for (const order of orders) {
-                if (order.status === 'confirmed_by_business') count++;
-            }
-            return count;
+            return orders.filter(o => o.status === 'confirmed_by_business').length;
         }
 
         function updatePendingDisplay() {
@@ -2096,6 +2040,7 @@
             if (navItems[idx]) navItems[idx].classList.add('active');
         }
 
+        // ===== DOMContentLoaded =====
         document.addEventListener('DOMContentLoaded', async () => {
             const user = Backend.getCurrentUser();
             const role = localStorage.getItem('userRole');
@@ -2104,17 +2049,61 @@
                 return;
             }
             currentUser = user;
+
+            // --- Resolve business ID ---
+            // For employees: user.get('businessId') is the owner's ID
+            // For owners: it's null, so we use the user's own ID
+            businessId = user.get('businessId') || user.id;
+            console.log('🔍 Business ID resolved to:', businessId);
+
+            // --- Check permissions ---
+            currentPermissions = await Backend.getEmployeePermissions(user.id);
+            if (currentPermissions.isOwner) {
+                isOwner = true;
+            } else if (user.get('businessRole') === 'manager') {
+                isManager = true;
+            } else if (!currentPermissions.isPending) {
+                isEmployee = true;
+            }
+
+            // --- Set back link ---
+            if (isEmployee || isManager) {
+                document.getElementById('backLink').href = 'employee-settings.html';
+            } else {
+                document.getElementById('backLink').href = 'index.html';
+            }
+
+            // --- Hide tabs/features for employees ---
+            if (isEmployee) {
+                document.getElementById('employeesTab').style.display = 'none';
+                document.getElementById('verificationTab').style.display = 'none';
+                document.getElementById('dataTab').style.display = 'none';
+                // Hide tab buttons (0:profile,1:employees,2:orders,3:inventory,4:lookup,5:verify,6:alerts,7:data)
+                document.querySelectorAll('.tab')[1].style.display = 'none';
+                document.querySelectorAll('.tab')[5].style.display = 'none';
+                document.querySelectorAll('.tab')[7].style.display = 'none';
+                document.getElementById('walletCard').style.display = 'none';
+                document.querySelector('.stats-grid').style.display = 'none';
+                document.getElementById('roleBanner').style.display = 'none';
+                document.getElementById('saveProfileBtn').style.display = 'none';
+                document.querySelectorAll('#profileTab .form-input').forEach(input => {
+                    input.disabled = true;
+                });
+            }
+            if (isManager && !isOwner) {
+                document.getElementById('employeesTab').style.display = 'none';
+                document.getElementById('verificationTab').style.display = 'none';
+                document.querySelectorAll('.tab')[1].style.display = 'none';
+                document.querySelectorAll('.tab')[5].style.display = 'none';
+            }
+
+            // --- Set UI ---
             businessRole = localStorage.getItem('businessRole') || 'owner';
             isVerified = localStorage.getItem('businessVerified') === 'true';
-
-            const urlParams = new URLSearchParams(window.location.search);
-            const tabParam = urlParams.get('tab');
-            if (tabParam && ['profile', 'employees', 'orders', 'inventory', 'lookup', 'verification', 'notifications', 'data'].includes(tabParam)) {
-                activeTab = tabParam;
-            }
-
             updateRoleUI();
             updateVerificationUI();
+
+            // --- Load all data (businessId is now guaranteed) ---
             await loadBusinessData();
             await loadEmployeesAndRoles();
             await loadOrders();
@@ -2122,31 +2111,18 @@
             await loadStats();
             await refreshWallet();
             await loadInventory();
-            switchTab(activeTab);
+
+            // --- Handle tab from URL ---
+            const urlParams = new URLSearchParams(window.location.search);
+            const tabParam = urlParams.get('tab');
+            if (tabParam && ['profile','employees','orders','inventory','lookup','verification','notifications','data'].includes(tabParam)) {
+                switchTab(tabParam);
+            } else {
+                switchTab('profile');
+            }
         });
 
-        async function refreshAll() {
-            await loadBusinessData();
-            await loadEmployeesAndRoles();
-            await loadOrders();
-            await loadNotifications();
-            await loadStats();
-            await refreshWallet();
-            await loadInventory();
-            showStatus('All data refreshed!', 'success');
-        }
-
-        async function refreshWallet() {
-            try {
-                const balance = await Backend.getBusinessWalletBalance(currentUser.id);
-                document.getElementById('availableBalance').textContent = `$${balance.available.toFixed(2)}`;
-                updatePendingDisplay();
-            } catch (error) {
-                document.getElementById('availableBalance').textContent = '$0.00';
-                document.getElementById('pendingBalance').textContent = 'Pending: $0.00';
-            }
-        }
-
+        // ===== UI UPDATE FUNCTIONS =====
         function updateRoleUI() {
             if (businessRole === 'owner') {
                 document.getElementById('roleIcon').textContent = '👑';
@@ -2180,6 +2156,19 @@
             }
         }
 
+        // ===== REFRESH =====
+        async function refreshAll() {
+            await loadBusinessData();
+            await loadEmployeesAndRoles();
+            await loadOrders();
+            await loadNotifications();
+            await loadStats();
+            await refreshWallet();
+            await loadInventory();
+            showStatus('All data refreshed!', 'success');
+        }
+
+        // ===== BUSINESS DATA =====
         async function loadBusinessData() {
             try {
                 const user = Backend.getCurrentUser();
@@ -2217,10 +2206,31 @@
             }
         }
 
-        // ================================================================
-        // ========== EMPLOYEES & ROLES (with dropdown menu) ==========
-        // ================================================================
-        
+        // ===== WALLET =====
+        async function refreshWallet() {
+            try {
+                const balance = await Backend.getBusinessWalletBalance(businessId);
+                document.getElementById('availableBalance').textContent = `$${balance.available.toFixed(2)}`;
+                updatePendingDisplay();
+            } catch (error) {
+                document.getElementById('availableBalance').textContent = '$0.00';
+                document.getElementById('pendingBalance').textContent = 'Pending: $0.00';
+            }
+        }
+
+        async function requestWithdraw() {
+            const balance = await Backend.getBusinessWalletBalance(businessId);
+            if (balance.available < 5) { showStatus(`Minimum withdrawal $5. Available: $${balance.available.toFixed(2)}`, 'error'); return; }
+            const amount = prompt(`Enter amount to withdraw (min $5, max $${balance.available.toFixed(2)})`, '5');
+            if (!amount) return;
+            const withdrawAmount = parseFloat(amount);
+            if (isNaN(withdrawAmount) || withdrawAmount < 5 || withdrawAmount > balance.available) { showStatus('Invalid amount', 'error'); return; }
+            const result = await Backend.requestWithdrawal(businessId, withdrawAmount);
+            if (result.success) { showStatus(result.message, 'success'); await refreshWallet(); await loadStats(); } 
+            else { showStatus(result.message, 'error'); }
+        }
+
+        // ===== EMPLOYEES & ROLES =====
         async function loadEmployeesAndRoles() {
             await loadEmployees();
             await loadRoles();
@@ -2312,7 +2322,6 @@
             }
         }
 
-        // Corrected: uses employeeId and roleName
         async function setEmployeeRoleDirect(employeeId, roleName) {
             document.querySelectorAll('.role-dropdown-menu.show').forEach(d => d.classList.remove('show'));
             if (!confirm(`Assign role "${roleName}" to this employee?`)) return;
@@ -2325,7 +2334,6 @@
             }
         }
 
-        // Close dropdowns when clicking outside
         document.addEventListener('click', function(event) {
             if (!event.target.closest('.role-assign-wrapper')) {
                 document.querySelectorAll('.role-dropdown-menu.show').forEach(d => d.classList.remove('show'));
@@ -2377,24 +2385,6 @@
             }
         }
 
-        async function assignRole(employeeId) {
-            const roles = await Backend.getRoles(currentUser.id);
-            if (roles.length === 0) {
-                showStatus('No custom roles created yet.', 'info');
-                return;
-            }
-            const roleNames = roles.map(r => r.name);
-            const selected = prompt(`Assign a role:\n\nAvailable roles: ${roleNames.join(', ')}`);
-            if (!selected) return;
-            const result = await Backend.assignRoleToEmployee(employeeId, selected);
-            if (result.success) {
-                showStatus(`Role "${selected}" assigned!`, 'success');
-                await loadEmployees();
-            } else {
-                showStatus(result.message, 'error');
-            }
-        }
-
         async function removeEmployee(employeeId) {
             if (!confirm('Remove this employee?')) return;
             const result = await Backend.removeStaffMember(employeeId);
@@ -2437,8 +2427,8 @@
                 showStatus(`Role "${name}" created!`, 'success');
                 document.getElementById('newRoleName').value = '';
                 checkboxes.forEach(cb => cb.checked = false);
-                await loadRoles();          // update the role list
-                await loadEmployees();      // refresh employee dropdowns to show the new role
+                await loadRoles();
+                await loadEmployees();
             } else {
                 showStatus(result.message, 'error');
             }
@@ -2455,15 +2445,12 @@
             }
         }
 
-        // ================================================================
-        // ========== ORDERS ==========
-        // ================================================================
-
+        // ===== ORDERS =====
         async function loadOrders() {
             const container = document.getElementById('ordersList');
             const bulkActionsDiv = document.getElementById('orderBulkActions');
             try {
-                const orders = await Backend.getOrdersForBusiness(currentUser.id);
+                const orders = await Backend.getOrdersForBusiness(businessId);
                 orders.forEach(order => {
                     if (pickupConfirmMap[order.id] !== undefined) {
                         order.businessPickupConfirmed = pickupConfirmMap[order.id];
@@ -2617,6 +2604,7 @@
             bulkBtn.textContent = '✓ Confirm Selected';
         }
 
+        // ===== NOTIFICATIONS =====
         async function loadNotifications() {
             const container = document.getElementById('notificationsList');
             try {
@@ -2636,10 +2624,11 @@
             await loadNotifications();
         }
 
+        // ===== STATS =====
         async function loadStats() {
             try {
-                const ads = await Backend.getShopAds(currentUser.id);
-                const orders = await Backend.getOrdersForBusiness(currentUser.id);
+                const ads = await Backend.getShopAds(businessId);
+                const orders = await Backend.getOrdersForBusiness(businessId);
                 const activeAds = ads.filter(a => a.active).length;
                 const pendingOrders = countPendingOrders(orders);
                 const uniqueCustomers = [...new Set(orders.map(o => o.consumerId))].length;
@@ -2652,18 +2641,7 @@
             } catch (error) {}
         }
 
-        async function requestWithdraw() {
-            const balance = await Backend.getBusinessWalletBalance(currentUser.id);
-            if (balance.available < 5) { showStatus(`Minimum withdrawal $5. Available: $${balance.available.toFixed(2)}`, 'error'); return; }
-            const amount = prompt(`Enter amount to withdraw (min $5, max $${balance.available.toFixed(2)})`, '5');
-            if (!amount) return;
-            const withdrawAmount = parseFloat(amount);
-            if (isNaN(withdrawAmount) || withdrawAmount < 5 || withdrawAmount > balance.available) { showStatus('Invalid amount', 'error'); return; }
-            const result = await Backend.requestWithdrawal(currentUser.id, withdrawAmount);
-            if (result.success) { showStatus(result.message, 'success'); await refreshWallet(); await loadStats(); } 
-            else { showStatus(result.message, 'error'); }
-        }
-
+        // ===== VERIFICATION =====
         async function submitVerification() {
             if (businessRole !== 'owner') { showStatus('Only owners can verify', 'error'); return; }
             const taxId = document.getElementById('taxId').value.trim();
@@ -2673,6 +2651,7 @@
             else { showStatus(result.message, 'error'); }
         }
 
+        // ===== TAB SWITCHING =====
         function switchTab(tabName) {
             activeTab = tabName;
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -2684,10 +2663,7 @@
             updateNavActive(tabName);
         }
 
-        // ================================================================
-        // ========== INVENTORY ==========
-        // ================================================================
-
+        // ===== INVENTORY =====
         function computeClaimedFromOrders(adMap, orders) {
             const claimed = {};
             for (const order of orders) {
@@ -2707,7 +2683,7 @@
         async function loadInventory() {
             const tbody = document.getElementById('inventoryBody');
             try {
-                let items = await Backend.loadInventoryItems();
+                const items = await Backend.loadInventoryItems(businessId);
                 if (!items || items.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="7" class="empty-state" style="padding:20px;">No inventory items found. Add your first item above!</td></tr>`;
                     return;
@@ -2720,7 +2696,7 @@
                     reverseMap[invId] = adId;
                 }
 
-                const orders = allOrdersCache.length > 0 ? allOrdersCache : await Backend.getOrdersForBusiness(currentUser.id);
+                const orders = allOrdersCache.length > 0 ? allOrdersCache : await Backend.getOrdersForBusiness(businessId);
                 const claimedMap = computeClaimedFromOrders(adMap, orders);
 
                 tbody.innerHTML = items.map(item => {
@@ -2801,7 +2777,7 @@
                 });
             }
 
-            let currentItems = await Backend.loadInventoryItems() || [];
+            let currentItems = await Backend.loadInventoryItems(businessId) || [];
             currentItems.push({
                 name,
                 batchNumber: batch,
@@ -2811,7 +2787,8 @@
                 salePrice: onSale ? salePrice : 0,
                 category,
                 onSale: onSale,
-                imageBase64: imageBase64
+                imageBase64: imageBase64,
+                businessId: businessId // Ensure the item is tied to the correct business
             });
 
             try {
@@ -2828,7 +2805,7 @@
         }
 
         function openEditInventory(itemId) {
-            Backend.loadInventoryItems().then(items => {
+            Backend.loadInventoryItems(businessId).then(items => {
                 const item = items.find(i => i.id === itemId);
                 if (!item) { showStatus('Item not found', 'error'); return; }
                 document.getElementById('editInvId').value = itemId;
@@ -2877,7 +2854,7 @@
         }
 
         function exportToAd(itemId) {
-            Backend.loadInventoryItems().then(items => {
+            Backend.loadInventoryItems(businessId).then(items => {
                 const item = items.find(i => i.id === itemId);
                 if (!item) { showStatus('Item not found in inventory', 'error'); return; }
                 const imageData = item.productImage || item.imageBase64 || null;
@@ -2901,8 +2878,6 @@
             }).catch(err => { showStatus('Error loading inventory item: ' + err.message, 'error'); });
         }
 
-        // importFromAds function and button removed
-
         async function deleteInventoryItem(itemId) {
             if (!confirm('Are you sure you want to delete this item from inventory?')) return;
             try {
@@ -2912,10 +2887,7 @@
             } catch (error) { showStatus('Error deleting item', 'error'); }
         }
 
-        // ================================================================
-        // ========== LOOKUP ==========
-        // ================================================================
-
+        // ===== LOOKUP =====
         function performLookup() {
             const input = document.getElementById('lookupInput').value.trim().toLowerCase();
             const resultsContainer = document.getElementById('lookupResults');
@@ -3020,6 +2992,7 @@
             finally { if (btn) { btn.disabled = false; btn.textContent = '✗ Cancel Order'; } }
         }
 
+        // ===== UTILITY =====
         function showStatus(message, type) {
             const status = document.getElementById('statusMessage');
             status.textContent = message;
@@ -3033,10 +3006,7 @@
             return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
         }
 
-        // ================================================================
-        // ========== EXCEL IMPORT/EXPORT FUNCTIONS ==========
-        // ================================================================
-
+        // ===== EXCEL IMPORT/EXPORT =====
         function parseExcelFile(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -3044,7 +3014,6 @@
                     try {
                         const data = new Uint8Array(e.target.result);
                         const workbook = XLSX.read(data, { type: 'array' });
-                        
                         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                         const jsonData = XLSX.utils.sheet_to_json(firstSheet);
                         resolve(jsonData);
@@ -3064,10 +3033,8 @@
                 showStatus('No data to export', 'error');
                 return;
             }
-            
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.json_to_sheet(data);
-            
             const colWidths = [];
             if (data.length > 0) {
                 const headers = Object.keys(data[0]);
@@ -3081,9 +3048,7 @@
                 });
                 ws['!cols'] = colWidths;
             }
-            
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
-            
             const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
             const blob = new Blob([wbout], { type: 'application/octet-stream' });
             const url = URL.createObjectURL(blob);
@@ -3094,19 +3059,13 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            
             showStatus(`✅ Exported ${data.length} records to ${filename}`, 'success');
         }
 
-        // ---- EXPORT FUNCTIONS ----
         async function exportOrders() {
             try {
-                const orders = await Backend.getOrdersForBusiness(currentUser.id);
-                if (orders.length === 0) {
-                    showStatus('No orders to export', 'error');
-                    return;
-                }
-                
+                const orders = await Backend.getOrdersForBusiness(businessId);
+                if (orders.length === 0) { showStatus('No orders to export', 'error'); return; }
                 const exportData = orders.map(order => ({
                     'Order ID': order.id,
                     'Customer': order.consumerName || '',
@@ -3118,21 +3077,14 @@
                     'Created At': new Date(order.createdAt).toLocaleString(),
                     'Collect By': order.collectByTime ? new Date(order.collectByTime).toLocaleString() : ''
                 }));
-                
                 downloadExcel(exportData, `orders_${new Date().toISOString().split('T')[0]}.xlsx`, 'Orders');
-            } catch (error) {
-                showStatus('Error exporting orders: ' + error.message, 'error');
-            }
+            } catch (error) { showStatus('Error exporting orders: ' + error.message, 'error'); }
         }
 
         async function exportInventory() {
             try {
-                const items = await Backend.loadInventoryItems();
-                if (items.length === 0) {
-                    showStatus('No inventory items to export', 'error');
-                    return;
-                }
-                
+                const items = await Backend.loadInventoryItems(businessId);
+                if (items.length === 0) { showStatus('No inventory items to export', 'error'); return; }
                 const exportData = items.map(item => ({
                     'Item Name': item.name || '',
                     'Batch Number': item.batchNumber || '',
@@ -3143,44 +3095,31 @@
                     'Category': item.category || '',
                     'On Sale': item.onSale ? 'Yes' : 'No'
                 }));
-                
                 downloadExcel(exportData, `inventory_${new Date().toISOString().split('T')[0]}.xlsx`, 'Inventory');
-            } catch (error) {
-                showStatus('Error exporting inventory: ' + error.message, 'error');
-            }
+            } catch (error) { showStatus('Error exporting inventory: ' + error.message, 'error'); }
         }
 
         async function exportEmployees() {
             try {
                 const employees = await Backend.getStaffList();
-                if (employees.length === 0) {
-                    showStatus('No employees to export', 'error');
-                    return;
-                }
-                
+                if (employees.length === 0) { showStatus('No employees to export', 'error'); return; }
                 const exportData = employees.map(emp => ({
                     'Employee ID': emp.id || '',
                     'Username': emp.username || '',
                     'Role': emp.role || '',
                     'Email': emp.email || ''
                 }));
-                
                 downloadExcel(exportData, `employees_${new Date().toISOString().split('T')[0]}.xlsx`, 'Employees');
-            } catch (error) {
-                showStatus('Error exporting employees: ' + error.message, 'error');
-            }
+            } catch (error) { showStatus('Error exporting employees: ' + error.message, 'error'); }
         }
 
         async function exportAllData() {
             try {
                 showStatus('Preparing all data for export...', 'info');
-                
-                const orders = await Backend.getOrdersForBusiness(currentUser.id);
-                const inventory = await Backend.loadInventoryItems();
+                const orders = await Backend.getOrdersForBusiness(businessId);
+                const inventory = await Backend.loadInventoryItems(businessId);
                 const employees = await Backend.getStaffList();
-                
                 const wb = XLSX.utils.book_new();
-                
                 if (orders.length > 0) {
                     const orderData = orders.map(order => ({
                         'Order ID': order.id,
@@ -3195,7 +3134,6 @@
                     const ws = XLSX.utils.json_to_sheet(orderData);
                     XLSX.utils.book_append_sheet(wb, ws, 'Orders');
                 }
-                
                 if (inventory.length > 0) {
                     const invData = inventory.map(item => ({
                         'Item Name': item.name || '',
@@ -3210,7 +3148,6 @@
                     const ws = XLSX.utils.json_to_sheet(invData);
                     XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
                 }
-                
                 if (employees.length > 0) {
                     const empData = employees.map(emp => ({
                         'Employee ID': emp.id || '',
@@ -3221,12 +3158,7 @@
                     const ws = XLSX.utils.json_to_sheet(empData);
                     XLSX.utils.book_append_sheet(wb, ws, 'Employees');
                 }
-                
-                if (wb.SheetNames.length === 0) {
-                    showStatus('No data to export', 'error');
-                    return;
-                }
-                
+                if (wb.SheetNames.length === 0) { showStatus('No data to export', 'error'); return; }
                 const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
                 const blob = new Blob([wbout], { type: 'application/octet-stream' });
                 const url = URL.createObjectURL(blob);
@@ -3237,41 +3169,23 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                
                 showStatus('✅ All data exported successfully!', 'success');
-            } catch (error) {
-                showStatus('Error exporting all data: ' + error.message, 'error');
-            }
+            } catch (error) { showStatus('Error exporting all data: ' + error.message, 'error'); }
         }
 
         async function importInventoryFromExcel() {
             const fileInput = document.getElementById('inventoryImportFile');
             const file = fileInput.files[0];
-            
-            if (!file) {
-                showStatus('Please select an Excel file first', 'error');
-                return;
-            }
-            
-            const validTypes = [
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'application/vnd.ms-excel'
-            ];
+            if (!file) { showStatus('Please select an Excel file first', 'error'); return; }
+            const validTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
             if (!validTypes.includes(file.type) && !file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
                 showStatus('Please select an Excel file (.xlsx or .xls)', 'error');
                 return;
             }
-            
             showStatus('Reading Excel file...', 'info');
-            
             try {
                 const excelData = await parseExcelFile(file);
-                
-                if (excelData.length === 0) {
-                    showStatus('No data found in the Excel file', 'error');
-                    return;
-                }
-                
+                if (excelData.length === 0) { showStatus('No data found in the Excel file', 'error'); return; }
                 const mappedData = excelData.map(row => {
                     const getValue = (keys) => {
                         for (const key of keys) {
@@ -3281,7 +3195,6 @@
                         }
                         return '';
                     };
-                    
                     return {
                         name: getValue(['Item Name', 'name', 'item name', 'Item', 'product', 'Product']),
                         batchNumber: getValue(['Batch Number', 'batchNumber', 'batch', 'Batch']),
@@ -3294,30 +3207,18 @@
                                 (getValue(['On Sale', 'onSale', 'on sale'])).toString().toLowerCase() === 'true'
                     };
                 });
-                
                 const validItems = mappedData.filter(item => item.name && item.name.trim() !== '');
-                
-                if (validItems.length === 0) {
-                    showStatus('No valid items found. "Item Name" is required.', 'error');
-                    return;
-                }
-                
+                if (validItems.length === 0) { showStatus('No valid items found. "Item Name" is required.', 'error'); return; }
                 if (!confirm(`Import ${validItems.length} items to inventory?`)) return;
-                
                 showStatus(`Importing ${validItems.length} items...`, 'info');
-                
-                const existing = await Backend.loadInventoryItems();
-                
+                const existing = await Backend.loadInventoryItems(businessId);
                 const merged = [...existing];
-                let addedCount = 0;
-                let duplicateCount = 0;
-                
+                let addedCount = 0, duplicateCount = 0;
                 for (const item of validItems) {
                     const exists = merged.some(existingItem => 
                         existingItem.name === item.name && 
                         existingItem.batchNumber === item.batchNumber
                     );
-                    
                     if (!exists) {
                         merged.push({
                             name: item.name,
@@ -3327,30 +3228,20 @@
                             originalPrice: item.originalPrice || 0,
                             salePrice: item.salePrice || 0,
                             category: item.category || 'other',
-                            onSale: item.onSale || false
+                            onSale: item.onSale || false,
+                            businessId: businessId
                         });
                         addedCount++;
-                    } else {
-                        duplicateCount++;
-                    }
+                    } else { duplicateCount++; }
                 }
-                
-                if (addedCount === 0) {
-                    showStatus(`All items already exist in inventory.`, 'info');
-                    return;
-                }
-                
+                if (addedCount === 0) { showStatus(`All items already exist in inventory.`, 'info'); return; }
                 const result = await Backend.saveInventoryItems(merged);
                 if (result.success) {
                     showStatus(`✅ Imported ${addedCount} items to inventory!${duplicateCount > 0 ? ` (${duplicateCount} duplicates skipped)` : ''}`, 'success');
                     fileInput.value = '';
                     await loadInventory();
-                } else {
-                    showStatus('Failed to import inventory items', 'error');
-                }
-            } catch (error) {
-                showStatus('Error importing Excel: ' + error.message, 'error');
-            }
+                } else { showStatus('Failed to import inventory items', 'error'); }
+            } catch (error) { showStatus('Error importing Excel: ' + error.message, 'error'); }
         }
 
         function downloadTemplate(type) {
@@ -3367,12 +3258,10 @@
                 }];
                 downloadExcel(data, 'inventory_template.xlsx', 'Inventory Template');
                 showStatus('✅ Template downloaded!', 'success');
-            } else {
-                showStatus('Unknown template type.', 'error');
-            }
+            } else { showStatus('Unknown template type.', 'error'); }
         }
 
-        // Expose functions globally
+        // ===== EXPOSE GLOBALLY =====
         window.switchTab = switchTab;
         window.saveProfile = saveProfile;
         window.loadOrders = loadOrders;
@@ -3396,11 +3285,9 @@
         window.openEditInventory = openEditInventory;
         window.closeEditInventory = closeEditInventory;
         window.saveEditInventory = saveEditInventory;
-        
         window.loadEmployees = loadEmployees;
         window.loadRoles = loadRoles;
         window.approveEmployee = approveEmployee;
-        window.assignRole = assignRole;
         window.toggleRoleDropdown = toggleRoleDropdown;
         window.setEmployeeRoleDirect = setEmployeeRoleDirect;
         window.removeEmployee = removeEmployee;
@@ -3411,7 +3298,6 @@
         window.submitVerification = submitVerification;
         window.confirmSingleOrder = confirmSingleOrder;
         window.markRead = markRead;
-
         window.exportOrders = exportOrders;
         window.exportInventory = exportInventory;
         window.exportEmployees = exportEmployees;
