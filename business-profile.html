@@ -1798,7 +1798,7 @@
                     </div>
                     <div class="inventory-actions">
                         <button class="save-btn" onclick="addInventoryItem()">➕ Add to Inventory</button>
-                        <button class="secondary-btn" onclick="importFromAds()">📥 Import from Ads</button>
+                        <!-- Import from Ads button removed -->
                     </div>
                 </div>
 
@@ -2232,9 +2232,6 @@
             try {
                 const employees = await Backend.getStaffList();
                 const roles = await Backend.getRoles(currentUser.id);
-                const roleOptionsHtml = roles.length > 0
-                    ? roles.map(r => `<div class="role-dropdown-item" onclick="event.stopPropagation(); setEmployeeRoleDirect('${r.id}', '${escapeHtml(r.name)}')">${escapeHtml(r.name)}</div>`).join('')
-                    : '<div class="role-dropdown-item" style="color:#999;">No custom roles</div>';
 
                 const pending = employees.filter(e => (e.role || '').toLowerCase() === 'pending');
                 if (pending.length === 0) {
@@ -2262,7 +2259,11 @@
                 if (active.length === 0) {
                     activeContainer.innerHTML = '<div class="empty-state" style="padding:20px;">No active employees</div>';
                 } else {
-                    activeContainer.innerHTML = active.map(emp => `
+                    activeContainer.innerHTML = active.map(emp => {
+                        const roleItems = roles.length > 0
+                            ? roles.map(r => `<div class="role-dropdown-item" onclick="event.stopPropagation(); setEmployeeRoleDirect('${emp.id}', '${escapeHtml(r.name)}')">${escapeHtml(r.name)}</div>`).join('')
+                            : '<div class="role-dropdown-item" style="color:#999;">No custom roles</div>';
+                        return `
                         <div class="employee-item">
                             <div class="employee-avatar">👤</div>
                             <div class="employee-details">
@@ -2273,13 +2274,13 @@
                                 <div class="role-assign-wrapper">
                                     <button class="emp-action-btn assign" onclick="toggleRoleDropdown(event, '${emp.id}')">🎯 Assign Role</button>
                                     <div class="role-dropdown-menu" id="roleDropdown_${emp.id}">
-                                        ${roleOptionsHtml}
+                                        ${roleItems}
                                     </div>
                                 </div>
                                 <button class="emp-action-btn revoke" onclick="removeEmployee('${emp.id}')">🗑️ Remove</button>
                             </div>
                         </div>
-                    `).join('');
+                    `}).join('');
                 }
 
                 const user = Backend.getCurrentUser();
@@ -2304,7 +2305,6 @@
             event.stopPropagation();
             const dropdown = document.getElementById(`roleDropdown_${empId}`);
             if (dropdown) {
-                // Close any other open dropdowns
                 document.querySelectorAll('.role-dropdown-menu.show').forEach(d => {
                     if (d !== dropdown) d.classList.remove('show');
                 });
@@ -2312,9 +2312,8 @@
             }
         }
 
-        // Direct role assignment from dropdown item
+        // Corrected: uses employeeId and roleName
         async function setEmployeeRoleDirect(employeeId, roleName) {
-            // Close all dropdowns first
             document.querySelectorAll('.role-dropdown-menu.show').forEach(d => d.classList.remove('show'));
             if (!confirm(`Assign role "${roleName}" to this employee?`)) return;
             const result = await Backend.assignRoleToEmployee(employeeId, roleName);
@@ -2438,7 +2437,8 @@
                 showStatus(`Role "${name}" created!`, 'success');
                 document.getElementById('newRoleName').value = '';
                 checkboxes.forEach(cb => cb.checked = false);
-                await loadRoles();
+                await loadRoles();          // update the role list
+                await loadEmployees();      // refresh employee dropdowns to show the new role
             } else {
                 showStatus(result.message, 'error');
             }
@@ -2901,70 +2901,7 @@
             }).catch(err => { showStatus('Error loading inventory item: ' + err.message, 'error'); });
         }
 
-        async function importFromAds() {
-            if (!confirm('This will add all active ads to your inventory as new items. Continue?')) return;
-            try {
-                const ads = await Backend.getShopAds(currentUser.id);
-                const activeAds = ads.filter(a => a.active);
-                if (activeAds.length === 0) {
-                    showStatus('No active ads to import', 'info');
-                    return;
-                }
-                let currentItems = await Backend.loadInventoryItems() || [];
-                let addedCount = 0;
-                let skippedCount = 0;
-                for (const ad of activeAds) {
-                    const exists = currentItems.some(i => i.name === ad.foodName && i.batchNumber === ad.batchNumber);
-                    if (exists) continue;
-                    
-                    const adPrice = ad.originalPrice || 0;
-                    if (adPrice <= 0) {
-                        skippedCount++;
-                        continue;
-                    }
-                    
-                    const discount = ad.discount || 0;
-                    let newItem = {
-                        name: ad.foodName,
-                        batchNumber: ad.batchNumber || '',
-                        expiryDate: ad.batchExpiryDate || null,
-                        quantity: ad.quantityLeft || 0,
-                        category: ad.category || 'other',
-                        imageBase64: ad.productImage || null
-                    };
-                    if (discount > 0) {
-                        const salePrice = adPrice * (1 - discount / 100);
-                        newItem.originalPrice = adPrice;
-                        newItem.salePrice = salePrice;
-                        newItem.onSale = true;
-                    } else {
-                        newItem.originalPrice = adPrice;
-                        newItem.salePrice = 0;
-                        newItem.onSale = false;
-                    }
-                    
-                    currentItems.push(newItem);
-                    addedCount++;
-                }
-                if (addedCount === 0 && skippedCount > 0) {
-                    showStatus(`Skipped ${skippedCount} ads because they have no price set.`, 'info');
-                    return;
-                }
-                if (addedCount === 0) {
-                    showStatus('No new items to import (all already in inventory)', 'info');
-                    return;
-                }
-                const result = await Backend.saveInventoryItems(currentItems);
-                if (result.success) {
-                    showStatus(`✅ Imported ${addedCount} items from ads!${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}`, 'success');
-                    await loadInventory();
-                } else {
-                    showStatus('Failed to save imported items', 'error');
-                }
-            } catch (error) {
-                showStatus('Error importing from ads: ' + error.message, 'error');
-            }
-        }
+        // importFromAds function and button removed
 
         async function deleteInventoryItem(itemId) {
             if (!confirm('Are you sure you want to delete this item from inventory?')) return;
@@ -3456,7 +3393,6 @@
         window.addInventoryItem = addInventoryItem;
         window.exportToAd = exportToAd;
         window.deleteInventoryItem = deleteInventoryItem;
-        window.importFromAds = importFromAds;
         window.openEditInventory = openEditInventory;
         window.closeEditInventory = closeEditInventory;
         window.saveEditInventory = saveEditInventory;
