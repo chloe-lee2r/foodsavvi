@@ -297,18 +297,14 @@ const Backend = {
         }
     },
 
-    // ========== UPDATE BUSINESS PROFILE – PERMISSION: can_edit_profile ==========
     async updateBusinessProfile(updates) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
-
-            // 🔥 Check permission: can_edit_profile
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_edit_profile && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to edit the business profile" };
+            const userRole = currentUser.get("businessRole");
+            if (userRole !== "owner" && userRole !== "manager") {
+                return { success: false, message: "Only owners and managers can edit business profile" };
             }
-
             Object.keys(updates).forEach(key => {
                 if (key.startsWith('business')) {
                     currentUser.set(key, updates[key]);
@@ -324,47 +320,10 @@ const Backend = {
 
     // ========== STAFF MANAGEMENT ==========
     
-    // ===== FIXED: Accept businessId to fetch staff for the correct business =====
-    async getStaffList(businessId) {
-        try {
-            const currentUser = Parse.User.current();
-            if (!currentUser) return [];
-
-            const ownerId = businessId || currentUser.id;
-
-            const owner = await new Parse.Query(Parse.User).get(ownerId, { useMasterKey: true });
-            const staffIds = owner.get("businessStaff") || [];
-
-            if (staffIds.length === 0) return [];
-
-            const query = new Parse.Query(Parse.User);
-            query.containedIn("objectId", staffIds);
-            const staffUsers = await query.find({ useMasterKey: true });
-
-            return staffUsers.map(user => ({
-                id: user.id,
-                username: user.get("username"),
-                role: user.get("businessRole") || "pending",
-                email: user.get("email")
-            }));
-        } catch (error) {
-            console.error('getStaffList error:', error);
-            return [];
-        }
-    },
-
-    // ===== ADD STAFF – PERMISSION: can_manage_employees =====
     async addStaffMember(staffUsername, staffRole = "staff") {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
-
-            // 🔥 Check permission: can_manage_employees
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_manage_employees && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to manage employees" };
-            }
-
             if (currentUser.get("businessRole") !== "owner") {
                 return { success: false, message: "Only owners can add staff members" };
             }
@@ -393,18 +352,10 @@ const Backend = {
         }
     },
 
-    // ===== REMOVE STAFF – PERMISSION: can_manage_employees =====
     async removeStaffMember(staffId) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
-
-            // 🔥 Check permission: can_manage_employees
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_manage_employees && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to manage employees" };
-            }
-
             if (currentUser.get("businessRole") !== "owner") {
                 return { success: false, message: "Only owners can remove staff members" };
             }
@@ -420,6 +371,34 @@ const Backend = {
         } catch (error) {
             console.error('removeStaffMember error:', error);
             return { success: false, message: error.message };
+        }
+    },
+
+    // ===== FIXED: Fetch fresh owner data so staff list actually loads =====
+    async getStaffList() {
+        try {
+            const currentUser = Parse.User.current();
+            if (!currentUser) return [];
+            
+            // 🔥 FIX: Fetch fresh owner data from server
+            const freshOwner = await new Parse.Query(Parse.User).get(currentUser.id, { useMasterKey: true });
+            const staffIds = freshOwner.get("businessStaff") || [];
+            
+            if (staffIds.length === 0) return [];
+            
+            const query = new Parse.Query(Parse.User);
+            query.containedIn("objectId", staffIds);
+            const staffUsers = await query.find({ useMasterKey: true });
+            
+            return staffUsers.map(user => ({
+                id: user.id,
+                username: user.get("username"),
+                role: user.get("businessRole") || "pending",
+                email: user.get("email")
+            }));
+        } catch (error) {
+            console.error('getStaffList error:', error);
+            return [];
         }
     },
 
@@ -458,20 +437,11 @@ const Backend = {
 
     // ========== ADVERTISEMENTS ==========
     
-    // ===== CREATE AD – PERMISSION: can_post_ads =====
     async createAd(adData) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
-
-            // 🔥 Check permission: can_post_ads
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_post_ads && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to post ads" };
-            }
-
-            // For owners, check verified status
-            if (perms.isOwner && !currentUser.get("businessVerified")) {
+            if (!currentUser.get("businessVerified")) {
                 return { success: false, message: "Business must be verified to post ads" };
             }
 
@@ -482,7 +452,7 @@ const Backend = {
             ad.set("offerEnds", new Date(adData.offerEnds));
             ad.set("batchExpiryDate", new Date(adData.batchExpiryDate));
             ad.set("businessName", currentUser.get("businessName"));
-            ad.set("businessId", currentUser.get("businessId") || currentUser.id);
+            ad.set("businessId", currentUser.id);
             ad.set("description", adData.description || "");
             ad.set("originalPrice", parseFloat(adData.originalPrice) || 0);
             ad.set("category", adData.category || "other");
@@ -492,11 +462,11 @@ const Backend = {
             ad.set("batchNumber", adData.batchNumber || "");
             ad.set("quantityLeft", parseInt(adData.quantityLeft) || 0);
             ad.set("initialQuantity", parseInt(adData.quantityLeft) || 0);
-
+            
             if (adData.imageBase64) {
                 ad.set("productImage", adData.imageBase64);
             }
-
+            
             await ad.save();
             return { success: true, ad: ad, adId: ad.id };
         } catch (error) {
@@ -583,22 +553,13 @@ const Backend = {
         }
     },
 
-    // ===== UPDATE AD – PERMISSION: can_post_ads =====
     async updateAd(adId, updates) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
-
-            // 🔥 Check permission: can_post_ads
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_post_ads && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to edit ads" };
-            }
-
             const Ad = Parse.Object.extend("Advertisement");
             const ad = await new Parse.Query(Ad).get(adId);
-            const businessId = currentUser.get('businessId') || currentUser.id;
-            if (ad.get("businessId") !== businessId) {
+            if (ad.get("businessId") !== currentUser.id) {
                 return { success: false, message: "Unauthorized" };
             }
             Object.keys(updates).forEach(key => {
@@ -620,22 +581,13 @@ const Backend = {
         }
     },
 
-    // ===== DELETE AD – PERMISSION: can_post_ads =====
     async deleteAd(adId) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
-
-            // 🔥 Check permission: can_post_ads
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_post_ads && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to delete ads" };
-            }
-
             const Ad = Parse.Object.extend("Advertisement");
             const ad = await new Parse.Query(Ad).get(adId);
-            const businessId = currentUser.get('businessId') || currentUser.id;
-            if (ad.get("businessId") !== businessId) {
+            if (ad.get("businessId") !== currentUser.id) {
                 return { success: false, message: "Unauthorized" };
             }
             await ad.destroy();
@@ -805,23 +757,17 @@ const Backend = {
         }
     },
 
-    // ===== GET ORDERS – PERMISSION: can_view_orders =====
     async getOrdersForBusiness(businessId) {
         try {
-            const currentUser = Parse.User.current();
-            if (!currentUser) return [];
-
-            // 🔥 Check permission: can_view_orders
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_view_orders && !perms.isOwner) {
-                return [];
+            if (!businessId) {
+                const currentUser = Parse.User.current();
+                businessId = currentUser?.id;
             }
-
-            const id = businessId || currentUser.get('businessId') || currentUser.id;
-
+            if (!businessId) return [];
+            
             const Order = Parse.Object.extend("Order");
             const query = new Parse.Query(Order);
-            query.equalTo("businessId", id);
+            query.equalTo("businessId", businessId);
             query.descending("createdAt");
             const orders = await query.find();
             return orders.map(o => ({
@@ -843,25 +789,17 @@ const Backend = {
         }
     },
 
-    // ===== CONFIRM ORDER – PERMISSION: can_view_orders =====
     async confirmOrderByBusiness(orderId, collectByTime = null) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
-
-            // 🔥 Check permission: can_view_orders
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_view_orders && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to confirm orders" };
-            }
-
+            
             const Order = Parse.Object.extend("Order");
             const query = new Parse.Query(Order);
             const order = await query.get(orderId);
             
             if (!order) return { success: false, message: "Order not found" };
-            const businessId = currentUser.get('businessId') || currentUser.id;
-            if (order.get("businessId") !== businessId) return { success: false, message: "Unauthorized" };
+            if (order.get("businessId") !== currentUser.id) return { success: false, message: "Unauthorized" };
             if (order.get("status") !== "pending") return { success: false, message: "Order already processed" };
             
             order.set("status", "confirmed_by_business");
@@ -1600,24 +1538,16 @@ const Backend = {
         }
     },
 
-    // ===== UPDATE CLAIM STATUS – PERMISSION: can_view_orders =====
     async updateClaimStatus(orderId, newStatus) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
 
-            // 🔥 Check permission: can_view_orders
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_view_orders && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to manage orders" };
-            }
-
             const Order = Parse.Object.extend("Order");
             const order = await new Parse.Query(Order).get(orderId);
 
             if (!order) return { success: false, message: "Order not found" };
-            const businessId = currentUser.get('businessId') || currentUser.id;
-            if (order.get("businessId") !== businessId) return { success: false, message: "Unauthorized" };
+            if (order.get("businessId") !== currentUser.id) return { success: false, message: "Unauthorized" };
 
             const statusMap = {
                 confirmed: "confirmed_by_business",
@@ -1705,6 +1635,7 @@ const Backend = {
             
             const newItems = items.map(item => {
                 const invItem = new Inventory();
+                // Use the passed businessId if available, otherwise currentUser.id
                 invItem.set("businessId", item.businessId || currentUser.id);
                 invItem.set("name", item.name);
                 invItem.set("batchNumber", item.batchNumber || "");
@@ -1728,20 +1659,15 @@ const Backend = {
         }
     },
 
-    // ===== LOAD INVENTORY – PERMISSION: can_read_inventory =====
+    // 🔥 FIXED: Accept optional businessId parameter
     async loadInventoryItems(businessId) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return [];
             
+            // Use the passed businessId, or fallback to current user's ID (for owners)
             const id = businessId || currentUser.id;
-
-            // 🔥 Check if user has read permission (or is owner)
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_read_inventory && !perms.isOwner) {
-                return []; // Return empty array if no permission
-            }
-
+            
             const Inventory = Parse.Object.extend("Inventory");
             const query = new Parse.Query(Inventory);
             query.equalTo("businessId", id);
@@ -1766,24 +1692,16 @@ const Backend = {
         }
     },
 
-    // ===== UPDATE INVENTORY – PERMISSION: can_edit_inventory =====
     async updateInventoryItem(itemId, updates) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
-
-            // 🔥 Check permission: can_edit_inventory
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_edit_inventory && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to edit inventory" };
-            }
-
+            
             const Inventory = Parse.Object.extend("Inventory");
             const item = await new Parse.Query(Inventory).get(itemId);
             
             if (!item) return { success: false, message: "Item not found" };
-            const businessId = currentUser.get('businessId') || currentUser.id;
-            if (item.get("businessId") !== businessId) return { success: false, message: "Unauthorized" };
+            if (item.get("businessId") !== currentUser.id) return { success: false, message: "Unauthorized" };
             
             const allowedKeys = ['name', 'batchNumber', 'expiryDate', 'quantity', 'originalPrice', 'salePrice', 'category', 'onSale', 'productImage'];
             for (const key of allowedKeys) {
@@ -1803,24 +1721,16 @@ const Backend = {
         }
     },
 
-    // ===== DELETE INVENTORY – PERMISSION: can_edit_inventory =====
     async deleteInventoryItem(itemId) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
-
-            // 🔥 Check permission: can_edit_inventory
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_edit_inventory && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to delete inventory items" };
-            }
-
+            
             const Inventory = Parse.Object.extend("Inventory");
             const item = await new Parse.Query(Inventory).get(itemId);
             
             if (!item) return { success: false, message: "Item not found" };
-            const businessId = currentUser.get('businessId') || currentUser.id;
-            if (item.get("businessId") !== businessId) return { success: false, message: "Unauthorized" };
+            if (item.get("businessId") !== currentUser.id) return { success: false, message: "Unauthorized" };
             
             await item.destroy();
             return { success: true };
@@ -1832,18 +1742,11 @@ const Backend = {
 
     // ========== ROLE & PERMISSION SYSTEM ==========
     
-    // ===== CREATE ROLE – PERMISSION: can_manage_employees =====
+    // Create a new custom role
     async createRole(businessId, roleName, permissions) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
-
-            // 🔥 Check permission: can_manage_employees
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_manage_employees && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to manage roles" };
-            }
-
             if (currentUser.get("businessRole") !== "owner") {
                 return { success: false, message: "Only owners can create roles" };
             }
@@ -1896,18 +1799,11 @@ const Backend = {
         }
     },
 
-    // ===== DELETE ROLE – PERMISSION: can_manage_employees =====
+    // Delete a role
     async deleteRole(roleId) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
-
-            // 🔥 Check permission: can_manage_employees
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_manage_employees && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to delete roles" };
-            }
-
             if (currentUser.get("businessRole") !== "owner") {
                 return { success: false, message: "Only owners can delete roles" };
             }
@@ -1916,8 +1812,7 @@ const Backend = {
             const role = await new Parse.Query(Role).get(roleId);
             
             if (!role) return { success: false, message: "Role not found" };
-            const businessId = currentUser.get('businessId') || currentUser.id;
-            if (role.get("businessId") !== businessId) {
+            if (role.get("businessId") !== currentUser.id) {
                 return { success: false, message: "Unauthorized" };
             }
 
@@ -1929,22 +1824,16 @@ const Backend = {
         }
     },
 
-    // ===== ASSIGN ROLE TO EMPLOYEE – PERMISSION: can_approve_members =====
+    // ===== FIXED: Assign role to employee (with Master Key) =====
     async assignRoleToEmployee(employeeId, roleName) {
         try {
             const currentUser = Parse.User.current();
             if (!currentUser) return { success: false, message: "Please login first" };
-
-            // 🔥 Check permission: can_approve_members
-            const perms = await this.getEmployeePermissions(currentUser.id);
-            if (!perms.can_approve_members && !perms.isOwner) {
-                return { success: false, message: "You don't have permission to approve members" };
-            }
-
             if (currentUser.get("businessRole") !== "owner") {
                 return { success: false, message: "Only owners can assign roles" };
             }
 
+            // 🔥 FIX: Use Master Key to fetch employee
             const employee = await new Parse.Query(Parse.User).get(employeeId, { useMasterKey: true });
             if (!employee) {
                 return { success: false, message: "Employee not found" };
