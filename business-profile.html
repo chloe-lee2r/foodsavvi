@@ -402,6 +402,7 @@
             gap: 6px;
             flex-shrink: 0;
             flex-wrap: wrap;
+            align-items: center;
         }
         .emp-action-btn {
             background: none;
@@ -420,15 +421,35 @@
         .emp-action-btn.assign { background: #e3f2fd; color: #0d47a1; }
         .emp-action-btn.assign:hover { background: #bbdefb; }
 
-        /* ===== DROPDOWN FOR ROLE ASSIGNMENT (ADDED) ===== */
-        .role-dropdown {
-            padding: 4px 6px;
+        /* ===== DROPDOWN MENU FOR ROLE ASSIGNMENT ===== */
+        .role-assign-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        .role-dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
             border: 1px solid #ccc;
             border-radius: 6px;
+            min-width: 130px;
+            z-index: 10;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 4px 0;
+        }
+        .role-dropdown-menu.show {
+            display: block;
+        }
+        .role-dropdown-item {
+            padding: 6px 12px;
+            cursor: pointer;
             font-size: 11px;
-            font-family: inherit;
-            background: white;
-            max-width: 110px;
+            white-space: nowrap;
+        }
+        .role-dropdown-item:hover {
+            background: #f0f4ff;
         }
 
         .notification-item.unread {
@@ -469,11 +490,11 @@
         }
 
         .nav-item.active .nav-emoji {
-            color: #999; /* keep emoji gray */
+            color: #999;
         }
 
         .nav-item.active span:last-child {
-            color: #667eea; /* only text turns blue */
+            color: #667eea;
         }
 
         .nav-emoji {
@@ -1546,7 +1567,6 @@
 <body>
     <div class="app">
         <div class="header">
-            <!-- 🔄 Dynamic back link: owner → index.html, employee → employee-settings.html -->
             <a href="#" id="backLink" class="back-link">←</a>
             <h1>business settings</h1>
             <button class="refresh-all-btn" onclick="refreshAll()">↻</button>
@@ -1975,7 +1995,6 @@
                 return;
             }
 
-            // Fetch permissions
             currentPermissions = await Backend.getEmployeePermissions(user.id);
 
             if (currentPermissions.isOwner) {
@@ -1986,49 +2005,34 @@
                 isEmployee = true;
             }
 
-            // If employee, set the back link to employee-settings.html
             if (isEmployee || isManager) {
                 document.getElementById('backLink').href = 'employee-settings.html';
             } else {
                 document.getElementById('backLink').href = 'index.html';
             }
 
-            // HIDE owner-only tabs if employee
             if (isEmployee) {
                 document.getElementById('employeesTab').style.display = 'none';
                 document.getElementById('verificationTab').style.display = 'none';
                 document.getElementById('dataTab').style.display = 'none';
-                // Hide the tabs from the tab bar
-                document.querySelectorAll('.tab')[1].style.display = 'none'; // employees
-                document.querySelectorAll('.tab')[5].style.display = 'none'; // verify
-                document.querySelectorAll('.tab')[7].style.display = 'none'; // data
-                // Hide wallet (employees don't need to see business wallet)
+                document.querySelectorAll('.tab')[1].style.display = 'none';
+                document.querySelectorAll('.tab')[5].style.display = 'none';
+                document.querySelectorAll('.tab')[7].style.display = 'none';
                 document.getElementById('walletCard').style.display = 'none';
-                // Hide stats grid (employees don't need to see business stats)
                 document.querySelector('.stats-grid').style.display = 'none';
-                // Hide role banner (employees don't need to see owner role)
                 document.getElementById('roleBanner').style.display = 'none';
-                // Hide save profile button for employees
                 document.getElementById('saveProfileBtn').style.display = 'none';
-                // Disable all profile inputs
                 document.querySelectorAll('#profileTab .form-input').forEach(input => {
                     input.disabled = true;
                 });
             }
 
-            // If manager, hide employee management and verification but keep other features
             if (isManager && !isOwner) {
                 document.getElementById('employeesTab').style.display = 'none';
                 document.getElementById('verificationTab').style.display = 'none';
-                document.querySelectorAll('.tab')[1].style.display = 'none'; // employees
-                document.querySelectorAll('.tab')[5].style.display = 'none'; // verify
-                document.getElementById('saveProfileBtn').style.display = 'block'; // managers can edit
-                document.querySelectorAll('#profileTab .form-input').forEach(input => {
-                    input.disabled = false;
-                });
+                document.querySelectorAll('.tab')[1].style.display = 'none';
+                document.querySelectorAll('.tab')[5].style.display = 'none';
             }
-
-            // If owner, show everything (default)
         })();
 
         // ===== LOCALSTORAGE-BASED persistence for businessPickupConfirmed =====
@@ -2046,34 +2050,26 @@
         }
 
         let pickupConfirmMap = loadPickupMap();
-
         let businessRole = 'staff';
         let isVerified = false;
         let currentUser = null;
         let activeTab = 'profile';
         let allOrdersCache = [];
-
         let selectedOrderIds = new Set();
         let currentDetailOrderId = null;
 
-        // ===== FUNCTION TO CALCULATE PENDING AMOUNT =====
         function calcPendingFromOrders(orders) {
             let total = 0;
             for (const order of orders) {
-                if (order.status === 'confirmed_by_business') {
-                    total += (order.totalAmount || 0);
-                }
+                if (order.status === 'confirmed_by_business') total += (order.totalAmount || 0);
             }
             return total;
         }
 
-        // ===== FUNCTION TO COUNT PENDING ORDERS =====
         function countPendingOrders(orders) {
             let count = 0;
             for (const order of orders) {
-                if (order.status === 'confirmed_by_business') {
-                    count++;
-                }
+                if (order.status === 'confirmed_by_business') count++;
             }
             return count;
         }
@@ -2083,7 +2079,6 @@
             document.getElementById('pendingBalance').textContent = `Pending: $${pending.toFixed(2)}`;
         }
 
-        // ===== UPDATE NAV ACTIVE (text turns blue) =====
         function updateNavActive(tabName) {
             const navItems = document.querySelectorAll('.bottom-nav .nav-item');
             navItems.forEach(item => item.classList.remove('active'));
@@ -2223,7 +2218,7 @@
         }
 
         // ================================================================
-        // ========== EMPLOYEES & ROLES ==========
+        // ========== EMPLOYEES & ROLES (with dropdown menu) ==========
         // ================================================================
         
         async function loadEmployeesAndRoles() {
@@ -2236,16 +2231,14 @@
             const activeContainer = document.getElementById('activeEmployeesList');
             try {
                 const employees = await Backend.getStaffList();
-                // Fetch roles for dropdown population
                 const roles = await Backend.getRoles(currentUser.id);
-                const roleOptions = roles.length > 0
-                    ? roles.map(r => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('')
-                    : '<option value="">No custom roles</option>';
-                
-                // Render Pending (users with role 'pending')
-                const pending = employees.filter(e => e.role === 'pending');
+                const roleOptionsHtml = roles.length > 0
+                    ? roles.map(r => `<div class="role-dropdown-item" onclick="event.stopPropagation(); setEmployeeRoleDirect('${r.id}', '${escapeHtml(r.name)}')">${escapeHtml(r.name)}</div>`).join('')
+                    : '<div class="role-dropdown-item" style="color:#999;">No custom roles</div>';
+
+                const pending = employees.filter(e => (e.role || '').toLowerCase() === 'pending');
                 if (pending.length === 0) {
-                    pendingContainer.innerHTML = '<div class="empty-state" style="padding: 20px;">No pending requests</div>';
+                    pendingContainer.innerHTML = '<div class="empty-state" style="padding:20px;">No pending requests</div>';
                 } else {
                     pendingContainer.innerHTML = pending.map(emp => `
                         <div class="employee-item">
@@ -2262,10 +2255,12 @@
                     `).join('');
                 }
 
-                // Render Active (users who are not pending and not the owner) – now with dropdown
-                const active = employees.filter(e => e.role !== 'pending' && e.role !== 'owner');
+                const active = employees.filter(e => {
+                    const role = (e.role || '').toLowerCase();
+                    return role !== 'pending' && role !== 'owner' && role !== '';
+                });
                 if (active.length === 0) {
-                    activeContainer.innerHTML = '<div class="empty-state" style="padding: 20px;">No active employees</div>';
+                    activeContainer.innerHTML = '<div class="empty-state" style="padding:20px;">No active employees</div>';
                 } else {
                     activeContainer.innerHTML = active.map(emp => `
                         <div class="employee-item">
@@ -2275,18 +2270,18 @@
                                 <span class="employee-role ${emp.role}">${emp.role}</span>
                             </div>
                             <div class="employee-actions">
-                                <select id="roleSelect_${emp.id}" class="role-dropdown">
-                                    <option value="">Assign role...</option>
-                                    ${roleOptions}
-                                </select>
-                                <button class="emp-action-btn assign" onclick="setEmployeeRole('${emp.id}')">Set</button>
+                                <div class="role-assign-wrapper">
+                                    <button class="emp-action-btn assign" onclick="toggleRoleDropdown(event, '${emp.id}')">🎯 Assign Role</button>
+                                    <div class="role-dropdown-menu" id="roleDropdown_${emp.id}">
+                                        ${roleOptionsHtml}
+                                    </div>
+                                </div>
                                 <button class="emp-action-btn revoke" onclick="removeEmployee('${emp.id}')">🗑️ Remove</button>
                             </div>
                         </div>
                     `).join('');
                 }
 
-                // ---- INVITATION CODE - always show in employees tab ----
                 const user = Backend.getCurrentUser();
                 let inviteCode = user ? user.get('invitationCode') : null;
                 if (!inviteCode) {
@@ -2305,21 +2300,38 @@
             }
         }
 
-        // NEW function for dropdown-based role assignment
-        async function setEmployeeRole(employeeId) {
-            const select = document.getElementById(`roleSelect_${employeeId}`);
-            if (!select) { showStatus('Dropdown not found', 'error'); return; }
-            const selectedRole = select.value;
-            if (!selectedRole) { showStatus('Please select a role from the dropdown', 'error'); return; }
-            if (!confirm(`Assign role "${selectedRole}" to this employee?`)) return;
-            const result = await Backend.assignRoleToEmployee(employeeId, selectedRole);
+        function toggleRoleDropdown(event, empId) {
+            event.stopPropagation();
+            const dropdown = document.getElementById(`roleDropdown_${empId}`);
+            if (dropdown) {
+                // Close any other open dropdowns
+                document.querySelectorAll('.role-dropdown-menu.show').forEach(d => {
+                    if (d !== dropdown) d.classList.remove('show');
+                });
+                dropdown.classList.toggle('show');
+            }
+        }
+
+        // Direct role assignment from dropdown item
+        async function setEmployeeRoleDirect(employeeId, roleName) {
+            // Close all dropdowns first
+            document.querySelectorAll('.role-dropdown-menu.show').forEach(d => d.classList.remove('show'));
+            if (!confirm(`Assign role "${roleName}" to this employee?`)) return;
+            const result = await Backend.assignRoleToEmployee(employeeId, roleName);
             if (result.success) {
-                showStatus(`Role "${selectedRole}" assigned!`, 'success');
+                showStatus(`Role "${roleName}" assigned!`, 'success');
                 await loadEmployees();
             } else {
                 showStatus(result.message, 'error');
             }
         }
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('.role-assign-wrapper')) {
+                document.querySelectorAll('.role-dropdown-menu.show').forEach(d => d.classList.remove('show'));
+            }
+        });
 
         function copyInviteCode() {
             const code = document.getElementById('displayInviteCode').textContent;
@@ -2328,7 +2340,7 @@
                 return;
             }
             navigator.clipboard.writeText(code).then(() => {
-                showStatus('✅ Invitation code copied to clipboard!', 'success');
+                showStatus('✅ Invitation code copied!', 'success');
             }).catch(() => {
                 const textarea = document.createElement('textarea');
                 textarea.value = code;
@@ -2369,11 +2381,11 @@
         async function assignRole(employeeId) {
             const roles = await Backend.getRoles(currentUser.id);
             if (roles.length === 0) {
-                showStatus('No custom roles created yet. Create one in the Roles section.', 'info');
+                showStatus('No custom roles created yet.', 'info');
                 return;
             }
             const roleNames = roles.map(r => r.name);
-            const selected = prompt(`Assign a role to this employee:\n\nAvailable roles: ${roleNames.join(', ')}`);
+            const selected = prompt(`Assign a role:\n\nAvailable roles: ${roleNames.join(', ')}`);
             if (!selected) return;
             const result = await Backend.assignRoleToEmployee(employeeId, selected);
             if (result.success) {
@@ -2433,7 +2445,7 @@
         }
 
         async function deleteRole(roleId) {
-            if (!confirm('Delete this role? Employees with this role will need a new assignment.')) return;
+            if (!confirm('Delete this role?')) return;
             const result = await Backend.deleteRole(roleId);
             if (result.success) {
                 showStatus('Role deleted', 'success');
@@ -2669,7 +2681,6 @@
             const tabMap = { profile: 0, employees: 1, orders: 2, inventory: 3, lookup: 4, verification: 5, notifications: 6, data: 7 };
             if (tabs[tabMap[tabName]]) tabs[tabMap[tabName]].classList.add('active');
             document.getElementById(`${tabName}Tab`).classList.add('active');
-            // Update nav active state
             updateNavActive(tabName);
         }
 
@@ -2890,7 +2901,6 @@
             }).catch(err => { showStatus('Error loading inventory item: ' + err.message, 'error'); });
         }
 
-        // ===== FIXED: Import from Ads – skip zero price ads =====
         async function importFromAds() {
             if (!confirm('This will add all active ads to your inventory as new items. Continue?')) return;
             try {
@@ -2907,14 +2917,12 @@
                     const exists = currentItems.some(i => i.name === ad.foodName && i.batchNumber === ad.batchNumber);
                     if (exists) continue;
                     
-                    // ✅ Skip ads with zero or missing price
                     const adPrice = ad.originalPrice || 0;
                     if (adPrice <= 0) {
                         skippedCount++;
                         continue;
                     }
                     
-                    // ✅ Check if ad has discount
                     const discount = ad.discount || 0;
                     let newItem = {
                         name: ad.foodName,
@@ -2925,7 +2933,6 @@
                         imageBase64: ad.productImage || null
                     };
                     if (discount > 0) {
-                        // On sale: set original and sale price
                         const salePrice = adPrice * (1 - discount / 100);
                         newItem.originalPrice = adPrice;
                         newItem.salePrice = salePrice;
@@ -2949,7 +2956,7 @@
                 }
                 const result = await Backend.saveInventoryItems(currentItems);
                 if (result.success) {
-                    showStatus(`✅ Imported ${addedCount} items from ads!${skippedCount > 0 ? ` (${skippedCount} skipped due to missing price)` : ''}`, 'success');
+                    showStatus(`✅ Imported ${addedCount} items from ads!${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}`, 'success');
                     await loadInventory();
                 } else {
                     showStatus('Failed to save imported items', 'error');
@@ -3093,7 +3100,6 @@
         // ========== EXCEL IMPORT/EXPORT FUNCTIONS ==========
         // ================================================================
 
-        // Helper: Parse Excel file and return data as array of objects
         function parseExcelFile(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -3102,7 +3108,6 @@
                         const data = new Uint8Array(e.target.result);
                         const workbook = XLSX.read(data, { type: 'array' });
                         
-                        // Get first sheet
                         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                         const jsonData = XLSX.utils.sheet_to_json(firstSheet);
                         resolve(jsonData);
@@ -3117,18 +3122,15 @@
             });
         }
 
-        // Helper: Download Excel file
         function downloadExcel(data, filename, sheetName = 'Data') {
             if (!data || data.length === 0) {
                 showStatus('No data to export', 'error');
                 return;
             }
             
-            // Create workbook and worksheet
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.json_to_sheet(data);
             
-            // Auto-size columns (approximate)
             const colWidths = [];
             if (data.length > 0) {
                 const headers = Object.keys(data[0]);
@@ -3145,7 +3147,6 @@
             
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
             
-            // Generate and download
             const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
             const blob = new Blob([wbout], { type: 'application/octet-stream' });
             const url = URL.createObjectURL(blob);
@@ -3241,7 +3242,6 @@
                 const inventory = await Backend.loadInventoryItems();
                 const employees = await Backend.getStaffList();
                 
-                // Create separate sheets in one workbook
                 const wb = XLSX.utils.book_new();
                 
                 if (orders.length > 0) {
@@ -3307,7 +3307,6 @@
             }
         }
 
-        // ---- IMPORT FUNCTIONS (Inventory only) ----
         async function importInventoryFromExcel() {
             const fileInput = document.getElementById('inventoryImportFile');
             const file = fileInput.files[0];
@@ -3317,10 +3316,9 @@
                 return;
             }
             
-            // Validate file type
             const validTypes = [
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-                'application/vnd.ms-excel' // .xls
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/vnd.ms-excel'
             ];
             if (!validTypes.includes(file.type) && !file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
                 showStatus('Please select an Excel file (.xlsx or .xls)', 'error');
@@ -3330,7 +3328,6 @@
             showStatus('Reading Excel file...', 'info');
             
             try {
-                // Step 1: Parse Excel file
                 const excelData = await parseExcelFile(file);
                 
                 if (excelData.length === 0) {
@@ -3338,7 +3335,6 @@
                     return;
                 }
                 
-                // Step 2: Map column names (handle different variations)
                 const mappedData = excelData.map(row => {
                     const getValue = (keys) => {
                         for (const key of keys) {
@@ -3362,39 +3358,24 @@
                     };
                 });
                 
-                // Step 3: Validate data
-                const validItems = mappedData.filter(item => {
-                    return item.name && item.name.trim() !== '';
-                });
+                const validItems = mappedData.filter(item => item.name && item.name.trim() !== '');
                 
                 if (validItems.length === 0) {
                     showStatus('No valid items found. "Item Name" is required.', 'error');
                     return;
                 }
                 
-                if (validItems.length < mappedData.length) {
-                    const skipped = mappedData.length - validItems.length;
-                    if (!confirm(`${validItems.length} valid items found. ${skipped} items skipped (missing name). Import the ${validItems.length} items?`)) {
-                        return;
-                    }
-                } else {
-                    if (!confirm(`Import ${validItems.length} items to inventory?`)) {
-                        return;
-                    }
-                }
+                if (!confirm(`Import ${validItems.length} items to inventory?`)) return;
                 
                 showStatus(`Importing ${validItems.length} items...`, 'info');
                 
-                // Step 4: Load existing inventory and merge
                 const existing = await Backend.loadInventoryItems();
                 
-                // Step 5: Add new items (avoid duplicates by checking name + batch)
                 const merged = [...existing];
                 let addedCount = 0;
                 let duplicateCount = 0;
                 
                 for (const item of validItems) {
-                    // Check if item already exists (same name and batch)
                     const exists = merged.some(existingItem => 
                         existingItem.name === item.name && 
                         existingItem.batchNumber === item.batchNumber
@@ -3418,14 +3399,13 @@
                 }
                 
                 if (addedCount === 0) {
-                    showStatus(`All ${duplicateCount} items already exist in inventory. No new items added.`, 'info');
+                    showStatus(`All items already exist in inventory.`, 'info');
                     return;
                 }
                 
-                // Step 6: Save merged inventory
                 const result = await Backend.saveInventoryItems(merged);
                 if (result.success) {
-                    showStatus(`✅ Successfully imported ${addedCount} items to inventory!${duplicateCount > 0 ? ` (${duplicateCount} duplicates skipped)` : ''}`, 'success');
+                    showStatus(`✅ Imported ${addedCount} items to inventory!${duplicateCount > 0 ? ` (${duplicateCount} duplicates skipped)` : ''}`, 'success');
                     fileInput.value = '';
                     await loadInventory();
                 } else {
@@ -3436,7 +3416,6 @@
             }
         }
 
-        // ---- TEMPLATE DOWNLOAD (Inventory only) ----
         function downloadTemplate(type) {
             if (type === 'inventory') {
                 const data = [{
@@ -3482,12 +3461,12 @@
         window.closeEditInventory = closeEditInventory;
         window.saveEditInventory = saveEditInventory;
         
-        // Employee & Role Exports
         window.loadEmployees = loadEmployees;
         window.loadRoles = loadRoles;
         window.approveEmployee = approveEmployee;
         window.assignRole = assignRole;
-        window.setEmployeeRole = setEmployeeRole;
+        window.toggleRoleDropdown = toggleRoleDropdown;
+        window.setEmployeeRoleDirect = setEmployeeRoleDirect;
         window.removeEmployee = removeEmployee;
         window.createRole = createRole;
         window.deleteRole = deleteRole;
@@ -3497,7 +3476,6 @@
         window.confirmSingleOrder = confirmSingleOrder;
         window.markRead = markRead;
 
-        // Excel Import/Export Exports (excluding importOrdersFromExcel)
         window.exportOrders = exportOrders;
         window.exportInventory = exportInventory;
         window.exportEmployees = exportEmployees;
