@@ -314,7 +314,7 @@
             document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
             renderQuickActions(currentPermissions);
-            loadStats();   // business data, permission aware
+            loadStats();
         });
 
         function renderQuickActions(perms) {
@@ -375,32 +375,21 @@
         }
 
         // Helper: get the real business ID (owner's ID) from the employee user
-        async function getBusinessOwnerId() {
+        function getBusinessOwnerId() {
             const user = Backend.getCurrentUser();
-            // Try the businessId pointer on the user object (common Parse pattern)
-            const businessRef = user.get('businessId');
-            if (businessRef) {
-                // If it's a Parse Object (pointer), get its id
-                if (businessRef.id) return businessRef.id;
-                // If it's a plain string
-                if (typeof businessRef === 'string') return businessRef;
-            }
-            // Fallback: maybe the user is directly under a business via a "business" relation
-            // Try fetching via a cloud function or query – here we assume backend can resolve it.
-            // For now, use the employee's own ID as last resort (will work only if owner == employee, unlikely)
-            return user.id;
+            return user.get('businessId') || user.id;
         }
 
         async function loadStats() {
             const panel = document.getElementById('summaryPanel');
             try {
-                const ownerId = await getBusinessOwnerId();
+                const ownerId = getBusinessOwnerId();
                 let statsHtml = '';
                 let hasData = false;
 
-                // Inventory
+                // Inventory – pass ownerId
                 if (currentPermissions.can_read_inventory || currentPermissions.can_edit_inventory) {
-                    const items = await Backend.loadInventoryItems();   // this likely uses business context
+                    const items = await Backend.loadInventoryItems(ownerId);
                     statsHtml += `
                         <div class="stat-item">
                             <div class="stat-number">${items.length}</div>
@@ -410,7 +399,7 @@
                     hasData = true;
                 }
 
-                // Active ads
+                // Active ads – getShopAds accepts businessId
                 if (currentPermissions.can_post_ads) {
                     const ads = await Backend.getShopAds(ownerId);
                     const activeAds = ads.filter(ad => ad.active);
@@ -423,7 +412,7 @@
                     hasData = true;
                 }
 
-                // Pending orders (awaiting pickup = confirmed_by_business)
+                // Pending orders – getOrdersForBusiness accepts businessId
                 if (currentPermissions.can_view_orders) {
                     const orders = await Backend.getOrdersForBusiness(ownerId);
                     const pendingOrders = orders.filter(o => o.status === 'confirmed_by_business');
@@ -436,9 +425,9 @@
                     hasData = true;
                 }
 
-                // Staff count
+                // Staff count – pass ownerId
                 if (currentPermissions.can_manage_employees) {
-                    const staff = await Backend.getStaffList();   // returns list for the owner’s business
+                    const staff = await Backend.getStaffList(ownerId);
                     const activeStaff = staff.filter(e => e.role !== 'pending' && e.role !== 'owner');
                     statsHtml += `
                         <div class="stat-item">
@@ -466,6 +455,7 @@
                     </div>
                 `;
             } catch (error) {
+                console.error('Error loading stats:', error);
                 panel.innerHTML = `<p class="empty-state">Could not load stats</p>`;
             }
         }
