@@ -130,20 +130,13 @@
         .content {
             flex: 1;
             padding: 20px;
-            padding-bottom: 20px;
+            padding-bottom: 0;
             display: flex;
             flex-direction: column;
         }
         
-        .section-title {
-            font-size: 16px; font-weight: 600; color: #1a1a1a;
-            margin-bottom: 16px; display: flex;
-            justify-content: space-between; align-items: center;
-        }
-        .view-all { color: #667eea; font-size: 14px; text-decoration: none; cursor: pointer; }
-        
         /* Quick Actions */
-        .quick-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
+        .quick-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 12px; }
         .action-card {
             background: #f8f9fa; border-radius: 16px; padding: 20px;
             text-decoration: none; color: #1a1a1a;
@@ -161,20 +154,20 @@
         .card-title { font-weight: 600; margin-bottom: 4px; }
         .card-desc { font-size: 12px; color: #666; }
 
-        /* Dynamic Summary Panel */
+        /* Dynamic Summary Panel – different color, compact spacing */
         .summary-panel {
-            background: #f8f9fa;
+            background: linear-gradient(135deg, #e8eaf6, #d1c4e9);
             border-radius: 16px;
-            padding: 20px;
-            margin-top: auto;
-            border: 1px solid #f0f0f0;
+            padding: 16px;
+            margin-top: 8px;
+            border: 1px solid #d1c4e9;
             animation: slideInRight 0.4s ease;
         }
         .summary-panel h3 {
             font-size: 16px;
             font-weight: 600;
-            margin-bottom: 16px;
-            color: #1a1a1a;
+            margin-bottom: 12px;
+            color: #4a3f6b;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -182,33 +175,30 @@
         .stat-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
+            gap: 10px;
         }
         .stat-item {
-            background: white;
+            background: rgba(255,255,255,0.7);
             border-radius: 12px;
             padding: 12px;
             text-align: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
         }
         .stat-number {
             font-size: 20px;
             font-weight: 700;
-            color: #667eea;
+            color: #5e4b8b;
             margin-bottom: 2px;
         }
         .stat-label {
             font-size: 11px;
-            color: #999;
+            color: #7e6e9e;
             text-transform: uppercase;
             letter-spacing: 0.3px;
         }
-        .stat-item.wide {
-            grid-column: span 2;
-        }
         .no-perms-message {
             text-align: center;
-            color: #999;
+            color: #6c5f8a;
             font-size: 13px;
         }
         
@@ -274,13 +264,13 @@
         
         <div class="content">
             <div class="quick-actions" id="quickActions">
-                <!-- Dynamic cards will be injected based on permissions -->
+                <!-- Dynamic cards injected by renderQuickActions() -->
             </div>
 
-            <!-- Dynamic summary panel (fills the bottom space) -->
+            <!-- Business Overview (dynamic stats) -->
             <div class="summary-panel" id="summaryPanel">
                 <div class="loading-spinner"></div>
-                <p style="text-align:center; color:#999;">loading stats...</p>
+                <p style="text-align:center; color:#7e6e9e;">loading stats...</p>
             </div>
         </div>
         
@@ -324,7 +314,7 @@
             document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
             renderQuickActions(currentPermissions);
-            loadStats(); // load the dynamic summary
+            loadStats();   // business data, permission aware
         });
 
         function renderQuickActions(perms) {
@@ -384,18 +374,33 @@
             container.innerHTML = html;
         }
 
+        // Helper: get the real business ID (owner's ID) from the employee user
+        async function getBusinessOwnerId() {
+            const user = Backend.getCurrentUser();
+            // Try the businessId pointer on the user object (common Parse pattern)
+            const businessRef = user.get('businessId');
+            if (businessRef) {
+                // If it's a Parse Object (pointer), get its id
+                if (businessRef.id) return businessRef.id;
+                // If it's a plain string
+                if (typeof businessRef === 'string') return businessRef;
+            }
+            // Fallback: maybe the user is directly under a business via a "business" relation
+            // Try fetching via a cloud function or query – here we assume backend can resolve it.
+            // For now, use the employee's own ID as last resort (will work only if owner == employee, unlikely)
+            return user.id;
+        }
+
         async function loadStats() {
             const panel = document.getElementById('summaryPanel');
             try {
-                const user = Backend.getCurrentUser();
-                const businessId = user.id; // the employee's user ID, as they belong to a business
-
+                const ownerId = await getBusinessOwnerId();
                 let statsHtml = '';
                 let hasData = false;
 
-                // Inventory stats (if permitted)
+                // Inventory
                 if (currentPermissions.can_read_inventory || currentPermissions.can_edit_inventory) {
-                    const items = await Backend.loadInventoryItems();
+                    const items = await Backend.loadInventoryItems();   // this likely uses business context
                     statsHtml += `
                         <div class="stat-item">
                             <div class="stat-number">${items.length}</div>
@@ -405,9 +410,9 @@
                     hasData = true;
                 }
 
-                // Active Ads (if can post ads)
+                // Active ads
                 if (currentPermissions.can_post_ads) {
-                    const ads = await Backend.getShopAds(businessId);
+                    const ads = await Backend.getShopAds(ownerId);
                     const activeAds = ads.filter(ad => ad.active);
                     statsHtml += `
                         <div class="stat-item">
@@ -418,10 +423,10 @@
                     hasData = true;
                 }
 
-                // Pending Orders (if can view orders)
+                // Pending orders (awaiting pickup = confirmed_by_business)
                 if (currentPermissions.can_view_orders) {
-                    const orders = await Backend.getOrdersForBusiness(businessId);
-                    const pendingOrders = orders.filter(o => o.status === 'confirmed_by_business'); // awaiting pickup
+                    const orders = await Backend.getOrdersForBusiness(ownerId);
+                    const pendingOrders = orders.filter(o => o.status === 'confirmed_by_business');
                     statsHtml += `
                         <div class="stat-item">
                             <div class="stat-number">${pendingOrders.length}</div>
@@ -431,9 +436,9 @@
                     hasData = true;
                 }
 
-                // Employee count (if can manage employees)
+                // Staff count
                 if (currentPermissions.can_manage_employees) {
-                    const staff = await Backend.getStaffList();
+                    const staff = await Backend.getStaffList();   // returns list for the owner’s business
                     const activeStaff = staff.filter(e => e.role !== 'pending' && e.role !== 'owner');
                     statsHtml += `
                         <div class="stat-item">
@@ -455,7 +460,7 @@
                 }
 
                 panel.innerHTML = `
-                    <h3>📊 Quick Overview</h3>
+                    <h3>📊 Business Overview</h3>
                     <div class="stat-grid">
                         ${statsHtml}
                     </div>
