@@ -67,8 +67,13 @@
             align-items: center;
             justify-content: center;
             text-decoration: none;
-            color: #007aff;
+            color: #667eea;
             font-size: 20px;
+            transition: 0.2s;
+        }
+        .back-link:active {
+            background: #e8ecf0;
+            transform: scale(0.95);
         }
 
         .header h1 {
@@ -1530,7 +1535,8 @@
 <body>
     <div class="app">
         <div class="header">
-            <a href="index.html" class="back-link">←</a>
+            <!-- 🔄 Dynamic back link: owner → index.html, employee → employee-settings.html -->
+            <a href="#" id="backLink" class="back-link">←</a>
             <h1>business settings</h1>
             <button class="refresh-all-btn" onclick="refreshAll()">↻</button>
         </div>
@@ -1575,7 +1581,7 @@
             </div>
 
             <!-- Business Wallet -->
-            <div class="wallet-card">
+            <div class="wallet-card" id="walletCard">
                 <div class="wallet-label">🏦 Business Wallet</div>
                 <div class="wallet-amount" id="availableBalance">$0.00</div>
                 <div class="wallet-small" id="pendingBalance">Pending: $0.00</div>
@@ -1586,7 +1592,7 @@
             </div>
 
             <!-- Tabs -->
-            <div class="tabs">
+            <div class="tabs" id="tabContainer">
                 <button class="tab" onclick="switchTab('profile')">profile</button>
                 <button class="tab" onclick="switchTab('employees')">employees</button>
                 <button class="tab" onclick="switchTab('orders')">orders</button>
@@ -1625,7 +1631,7 @@
                         <input type="time" class="form-input" id="businessClose" value="21:00" />
                     </div>
                 </div>
-                <button class="save-btn" onclick="saveProfile()" id="saveProfileBtn">save changes</button>
+                <button class="save-btn" id="saveProfileBtn" onclick="saveProfile()">save changes</button>
             </div>
 
             <!-- ========== EMPLOYEES & ROLES TAB ========== -->
@@ -1648,7 +1654,7 @@
                 <div style="margin-top: 20px;">
                     <h4 style="font-size: 14px; color: #e65100; margin-bottom: 12px;">⏳ Pending Approvals</h4>
                     <div id="pendingEmployeesList">
-                        <!-- EMPLOYEES RENDERED HERE -->
+                        <div class="empty-state" style="padding: 20px;">No pending requests</div>
                     </div>
                 </div>
 
@@ -1944,6 +1950,76 @@
     </script>
 
     <script>
+        // ===== SECURITY: Check if user is owner or employee =====
+        let currentPermissions = {};
+        let isOwner = false;
+        let isManager = false;
+        let isEmployee = false;
+
+        (async function checkAccess() {
+            const user = Backend.getCurrentUser();
+            const role = localStorage.getItem('userRole');
+            if (!user || role !== 'advertiser') {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            // Fetch permissions
+            currentPermissions = await Backend.getEmployeePermissions(user.id);
+
+            if (currentPermissions.isOwner) {
+                isOwner = true;
+            } else if (user.get('businessRole') === 'manager') {
+                isManager = true;
+            } else if (!currentPermissions.isPending) {
+                isEmployee = true;
+            }
+
+            // If employee, set the back link to employee-settings.html
+            if (isEmployee || isManager) {
+                document.getElementById('backLink').href = 'employee-settings.html';
+            } else {
+                document.getElementById('backLink').href = 'index.html';
+            }
+
+            // HIDE owner-only tabs if employee
+            if (isEmployee) {
+                document.getElementById('employeesTab').style.display = 'none';
+                document.getElementById('verificationTab').style.display = 'none';
+                document.getElementById('dataTab').style.display = 'none';
+                // Hide the tabs from the tab bar
+                document.querySelectorAll('.tab')[1].style.display = 'none'; // employees
+                document.querySelectorAll('.tab')[5].style.display = 'none'; // verify
+                document.querySelectorAll('.tab')[7].style.display = 'none'; // data
+                // Hide wallet (employees don't need to see business wallet)
+                document.getElementById('walletCard').style.display = 'none';
+                // Hide stats grid (employees don't need to see business stats)
+                document.querySelector('.stats-grid').style.display = 'none';
+                // Hide role banner (employees don't need to see owner role)
+                document.getElementById('roleBanner').style.display = 'none';
+                // Hide save profile button for employees
+                document.getElementById('saveProfileBtn').style.display = 'none';
+                // Disable all profile inputs
+                document.querySelectorAll('#profileTab .form-input').forEach(input => {
+                    input.disabled = true;
+                });
+            }
+
+            // If manager, hide employee management and verification but keep other features
+            if (isManager && !isOwner) {
+                document.getElementById('employeesTab').style.display = 'none';
+                document.getElementById('verificationTab').style.display = 'none';
+                document.querySelectorAll('.tab')[1].style.display = 'none'; // employees
+                document.querySelectorAll('.tab')[5].style.display = 'none'; // verify
+                document.getElementById('saveProfileBtn').style.display = 'block'; // managers can edit
+                document.querySelectorAll('#profileTab .form-input').forEach(input => {
+                    input.disabled = false;
+                });
+            }
+
+            // If owner, show everything (default)
+        })();
+
         // ===== LOCALSTORAGE-BASED persistence for businessPickupConfirmed =====
         function loadPickupMap() {
             try {
@@ -2114,6 +2190,10 @@
         }
 
         async function saveProfile() {
+            if (isEmployee) {
+                showStatus('Employees cannot edit profile', 'error');
+                return;
+            }
             const updates = {
                 businessName: document.getElementById('businessName').value,
                 businessPhone: document.getElementById('businessPhone').value,
@@ -2140,22 +2220,16 @@
             await loadRoles();
         }
 
-        // ===== FIXED LOAD EMPLOYEES =====
         async function loadEmployees() {
             const pendingContainer = document.getElementById('pendingEmployeesList');
             const activeContainer = document.getElementById('activeEmployeesList');
-            
             try {
                 const employees = await Backend.getStaffList();
                 
-                // ——— PENDING ———
-                const pending = employees.filter(e => {
-                    const role = (e.role || '').toLowerCase();
-                    return role === 'pending';
-                });
-
+                // Render Pending (users with role 'pending')
+                const pending = employees.filter(e => e.role === 'pending');
                 if (pending.length === 0) {
-                    pendingContainer.innerHTML = `<div class="empty-state" style="padding:20px;">No pending requests</div>`;
+                    pendingContainer.innerHTML = '<div class="empty-state" style="padding: 20px;">No pending requests</div>';
                 } else {
                     pendingContainer.innerHTML = pending.map(emp => `
                         <div class="employee-item">
@@ -2172,14 +2246,10 @@
                     `).join('');
                 }
 
-                // ——— ACTIVE ———
-                const active = employees.filter(e => {
-                    const role = (e.role || '').toLowerCase();
-                    return role !== 'pending' && role !== 'owner' && role !== '';
-                });
-
+                // Render Active (users who are not pending and not the owner)
+                const active = employees.filter(e => e.role !== 'pending' && e.role !== 'owner');
                 if (active.length === 0) {
-                    activeContainer.innerHTML = `<div class="empty-state" style="padding:20px;">No active employees</div>`;
+                    activeContainer.innerHTML = '<div class="empty-state" style="padding: 20px;">No active employees</div>';
                 } else {
                     activeContainer.innerHTML = active.map(emp => `
                         <div class="employee-item">
@@ -2196,7 +2266,7 @@
                     `).join('');
                 }
 
-                // ——— INVITATION CODE ———
+                // ---- INVITATION CODE - always show in employees tab ----
                 const user = Backend.getCurrentUser();
                 let inviteCode = user ? user.get('invitationCode') : null;
                 if (!inviteCode) {
@@ -2210,8 +2280,7 @@
                 document.getElementById('displayInviteCode').textContent = inviteCode || '-----';
 
             } catch (error) {
-                console.error('loadEmployees error:', error);
-                pendingContainer.innerHTML = `<div class="empty-state" style="padding:20px;color:#ff3b30;">Error loading employees</div>`;
+                pendingContainer.innerHTML = '<div class="empty-state" style="padding:20px;color:#ff3b30;">Error loading employees</div>';
                 activeContainer.innerHTML = '';
             }
         }
