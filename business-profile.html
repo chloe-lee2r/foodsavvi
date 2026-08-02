@@ -18,6 +18,7 @@
         }
     </script>
     <style>
+        /* ========== All styles ========== */
         @font-face {
             font-family: 'RusticStory';
             src: url('./assets/RusticStory-R9vKM.ttf') format('truetype'),
@@ -2073,28 +2074,38 @@
                 document.getElementById('backLink').href = 'index.html';
             }
 
-            // --- Hide tabs/features for employees ---
+            // --- Hide restricted features for non-owners (Employees & Managers) ---
             if (isEmployee) {
-                document.getElementById('employeesTab').style.display = 'none';
-                document.getElementById('verificationTab').style.display = 'none';
-                document.getElementById('dataTab').style.display = 'none';
-                // Hide tab buttons (0:profile,1:employees,2:orders,3:inventory,4:lookup,5:verify,6:alerts,7:data)
-                document.querySelectorAll('.tab')[1].style.display = 'none';
-                document.querySelectorAll('.tab')[5].style.display = 'none';
-                document.querySelectorAll('.tab')[7].style.display = 'none';
-                document.getElementById('walletCard').style.display = 'none';
-                document.querySelector('.stats-grid').style.display = 'none';
-                document.getElementById('roleBanner').style.display = 'none';
-                document.getElementById('saveProfileBtn').style.display = 'none';
+                document.getElementById('verificationTab').style.display = 'none'; // Verify is owner-only
+                document.getElementById('dataTab').style.display = 'none';         // Data import/export is owner-only
+                document.querySelectorAll('.tab')[5].style.display = 'none';      // Verify tab button
+                document.querySelectorAll('.tab')[7].style.display = 'none';      // Data tab button
+                document.getElementById('walletCard').style.display = 'none';     // Wallet is owner-only
+                document.querySelector('.stats-grid').style.display = 'none';     // Stats grid is owner-only
+                document.getElementById('roleBanner').style.display = 'none';     // Role banner is owner-only
+                document.getElementById('saveProfileBtn').style.display = 'none'; // Profile edit is owner-only
                 document.querySelectorAll('#profileTab .form-input').forEach(input => {
                     input.disabled = true;
                 });
             }
             if (isManager && !isOwner) {
-                document.getElementById('employeesTab').style.display = 'none';
                 document.getElementById('verificationTab').style.display = 'none';
-                document.querySelectorAll('.tab')[1].style.display = 'none';
                 document.querySelectorAll('.tab')[5].style.display = 'none';
+                // Managers usually can't see data/import either unless explicitly allowed, but we keep it hidden.
+                document.getElementById('dataTab').style.display = 'none';
+                document.querySelectorAll('.tab')[7].style.display = 'none';
+            }
+
+            // --- 🔥 FIX: Show/Hide Employees tab & Invite Code based on PERMISSIONS ---
+            const canManageEmployees = isOwner || currentPermissions.can_manage_employees;
+            if (!canManageEmployees) {
+                document.getElementById('employeesTab').style.display = 'none';
+                document.querySelectorAll('.tab')[1].style.display = 'none'; // Hide the "employees" tab button
+                document.getElementById('inviteCodeSection').style.display = 'none'; // Hide invite code card
+            } else {
+                document.getElementById('employeesTab').style.display = 'block';
+                document.querySelectorAll('.tab')[1].style.display = 'block'; // Show the "employees" tab button
+                document.getElementById('inviteCodeSection').style.display = 'block'; // Show invite code card
             }
 
             // --- Set UI ---
