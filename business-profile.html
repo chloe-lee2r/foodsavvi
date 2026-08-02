@@ -1611,7 +1611,7 @@
                 <button class="tab" onclick="switchTab('lookup')">lookup</button>
                 <button class="tab" onclick="switchTab('verification')">verify</button>
                 <button class="tab" onclick="switchTab('notifications')">alerts</button>
-                <button class="tab" onclick="switchTab('data')">📊 data</button>
+                <button class="tab" onclick="switchTab('data')">data</button>
             </div>
 
             <!-- Profile Tab -->
@@ -1873,18 +1873,6 @@
                         </div>
                         <div class="import-help">
                             Required columns: <strong>Item Name</strong>, <strong>Quantity</strong>. Optional: Batch Number, Expiry Date, Original Price, Sale Price, Category, On Sale
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px;">Import Orders (Excel)</label>
-                        <div class="file-input-wrapper">
-                            <input type="file" id="ordersImportFile" accept=".xlsx,.xls">
-                            <button onclick="importOrdersFromExcel()" style="background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; font-family: inherit;">Import</button>
-                            <button class="template-btn" onclick="downloadTemplate('orders')">📄 Template</button>
-                        </div>
-                        <div class="import-help">
-                            Required columns: <strong>Customer</strong>, <strong>Food Name</strong>. Optional: Quantity, Total Amount, Status, Batch Number, Created At
                         </div>
                     </div>
                 </div>
@@ -3319,7 +3307,7 @@
             }
         }
 
-        // ---- IMPORT FUNCTIONS ----
+        // ---- IMPORT FUNCTIONS (Inventory only) ----
         async function importInventoryFromExcel() {
             const fileInput = document.getElementById('inventoryImportFile');
             const file = fileInput.files[0];
@@ -3448,127 +3436,10 @@
             }
         }
 
-        async function importOrdersFromExcel() {
-            const fileInput = document.getElementById('ordersImportFile');
-            const file = fileInput.files[0];
-            
-            if (!file) {
-                showStatus('Please select an Excel file first', 'error');
-                return;
-            }
-            
-            // Validate file type
-            const validTypes = [
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-                'application/vnd.ms-excel' // .xls
-            ];
-            if (!validTypes.includes(file.type) && !file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-                showStatus('Please select an Excel file (.xlsx or .xls)', 'error');
-                return;
-            }
-            
-            showStatus('Reading Excel file...', 'info');
-            
-            try {
-                // Step 1: Parse Excel file
-                const excelData = await parseExcelFile(file);
-                
-                if (excelData.length === 0) {
-                    showStatus('No data found in the Excel file', 'error');
-                    return;
-                }
-                
-                // Step 2: Map column names
-                const mappedData = excelData.map(row => {
-                    const getValue = (keys) => {
-                        for (const key of keys) {
-                            if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
-                                return row[key];
-                            }
-                        }
-                        return '';
-                    };
-                    
-                    return {
-                        consumerName: getValue(['Customer', 'consumerName', 'customer name', 'Customer Name']),
-                        foodName: getValue(['Item', 'foodName', 'Food Name', 'food name']),
-                        quantity: parseInt(getValue(['Quantity', 'quantity', 'qty'])) || 1,
-                        totalAmount: parseFloat(getValue(['Total Amount', 'totalAmount', 'Amount', 'amount'])) || 0,
-                        status: getValue(['Status', 'status']),
-                        batchNumber: getValue(['Batch Number', 'batchNumber', 'batch', 'Batch']),
-                        createdAt: getValue(['Created At', 'createdAt', 'date', 'Date'])
-                    };
-                });
-                
-                // Step 3: Validate data
-                const validOrders = mappedData.filter(order => {
-                    return order.consumerName && order.consumerName.trim() !== '' && 
-                           order.foodName && order.foodName.trim() !== '';
-                });
-                
-                if (validOrders.length === 0) {
-                    showStatus('No valid orders found. "Customer" and "Item" are required.', 'error');
-                    return;
-                }
-                
-                if (validOrders.length < mappedData.length) {
-                    const skipped = mappedData.length - validOrders.length;
-                    if (!confirm(`${validOrders.length} valid orders found. ${skipped} orders skipped (missing required fields). Import the ${validOrders.length} orders?`)) {
-                        return;
-                    }
-                } else {
-                    if (!confirm(`Import ${validOrders.length} orders?`)) {
-                        return;
-                    }
-                }
-                
-                showStatus(`Importing ${validOrders.length} orders...`, 'info');
-                
-                let successCount = 0;
-                let errorCount = 0;
-                
-                for (const order of validOrders) {
-                    try {
-                        const Order = Parse.Object.extend("Order");
-                        const newOrder = new Order();
-                        newOrder.set("consumerName", order.consumerName);
-                        newOrder.set("foodName", order.foodName);
-                        newOrder.set("quantity", order.quantity || 1);
-                        newOrder.set("totalAmount", order.totalAmount || 0);
-                        newOrder.set("status", order.status || 'pending');
-                        newOrder.set("batchNumber", order.batchNumber || '');
-                        newOrder.set("businessId", currentUser.id);
-                        newOrder.set("businessName", currentUser.get('businessName'));
-                        newOrder.set("consumerId", 'imported_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
-                        
-                        if (order.createdAt) {
-                            const date = new Date(order.createdAt);
-                            if (!isNaN(date.getTime())) {
-                                newOrder.set("createdAt", date);
-                            }
-                        }
-                        
-                        await newOrder.save();
-                        successCount++;
-                    } catch (err) {
-                        errorCount++;
-                    }
-                }
-                
-                showStatus(`✅ Imported ${successCount} orders. ${errorCount} failed.`, 'success');
-                fileInput.value = '';
-                await loadOrders();
-            } catch (error) {
-                showStatus('Error importing Excel: ' + error.message, 'error');
-            }
-        }
-
-        // ---- TEMPLATE DOWNLOAD ----
+        // ---- TEMPLATE DOWNLOAD (Inventory only) ----
         function downloadTemplate(type) {
-            let data = [];
-            
             if (type === 'inventory') {
-                data = [{
+                const data = [{
                     'Item Name': 'Sample Item',
                     'Batch Number': 'BATCH-001',
                     'Expiry Date': '2026-12-31',
@@ -3579,19 +3450,10 @@
                     'On Sale': 'Yes'
                 }];
                 downloadExcel(data, 'inventory_template.xlsx', 'Inventory Template');
-            } else if (type === 'orders') {
-                data = [{
-                    'Customer': 'John Doe',
-                    'Item': 'Organic Milk',
-                    'Quantity': '2',
-                    'Total Amount': '10.00',
-                    'Status': 'pending',
-                    'Batch Number': 'BATCH-001',
-                    'Created At': new Date().toISOString()
-                }];
-                downloadExcel(data, 'orders_template.xlsx', 'Orders Template');
+                showStatus('✅ Template downloaded!', 'success');
+            } else {
+                showStatus('Unknown template type.', 'error');
             }
-            showStatus(`✅ Template downloaded!`, 'success');
         }
 
         // Expose functions globally
@@ -3635,13 +3497,12 @@
         window.confirmSingleOrder = confirmSingleOrder;
         window.markRead = markRead;
 
-        // Excel Import/Export Exports
+        // Excel Import/Export Exports (excluding importOrdersFromExcel)
         window.exportOrders = exportOrders;
         window.exportInventory = exportInventory;
         window.exportEmployees = exportEmployees;
         window.exportAllData = exportAllData;
         window.importInventoryFromExcel = importInventoryFromExcel;
-        window.importOrdersFromExcel = importOrdersFromExcel;
         window.downloadTemplate = downloadTemplate;
     </script>
 </body>
