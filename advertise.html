@@ -881,14 +881,15 @@
             document.getElementById('loadingOverlay').style.display = 'flex';
             try {
                 const currentUser = Backend.getCurrentUser();
-                const shopAds = await Backend.getShopAds(currentUser.id); // FIX: pass userId
+                const shopAds = await Backend.getShopAds(currentUser.id);
                 const ad = shopAds.find(a => a.id === adId);
                 if (ad) {
-                    document.getElementById('foodName').value = ad.foodName;
+                    document.getElementById('foodName').value = ad.foodName || '';
                     document.getElementById('description').value = ad.description || '';
-                    document.getElementById('originalPrice').value = ad.originalPrice || 0;  // ensure fallback
-                    document.getElementById('discount').value = ad.discount || 0;
-                    document.getElementById('quantity').value = ad.quantityLeft || 1;
+                    // CRITICAL FIX: Only set price if it's explicitly defined, otherwise blank
+                    document.getElementById('originalPrice').value = ad.originalPrice != null ? ad.originalPrice : '';
+                    document.getElementById('discount').value = ad.discount != null ? ad.discount : '';
+                    document.getElementById('quantity').value = ad.quantityLeft != null ? ad.quantityLeft : 1;
                     document.getElementById('batchNumber').value = ad.batchNumber || '';
                     document.getElementById('category').value = ad.category || 'other';
                     
